@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="bn" class="dark scroll-smooth">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      (function() {
+        // Prevent cross-origin third-party script errors (e.g. YouTube iframe, fonts, external media) from bubbling
+        window.addEventListener('error', function(event) {
+          if (!event || !event.message || event.message === 'Script error.' || event.message === 'Script error') {
+            if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+            if (typeof event.preventDefault === 'function') event.preventDefault();
+            return true;
+          }
+        }, true);
+
+        window.onerror = function(message, source, lineno, colno, error) {
+          if (!message || message === 'Script error.' || message === 'Script error' || !source || source === '') {
+            return true;
+          }
+          return false;
+        };
+
+        window.addEventListener('unhandledrejection', function(event) {
+          var reason = (event && event.reason) ? String(event.reason.message || event.reason) : '';
+          if (reason.indexOf('Script error') !== -1 || reason.indexOf('AbortError') !== -1 || reason.indexOf('NotAllowedError') !== -1) {
+            if (typeof event.stopImmediatePropagation === 'function') event.stopImmediatePropagation();
+            if (typeof event.preventDefault === 'function') event.preventDefault();
+            return true;
+          }
+        }, true);
+      })();
+    </script>
+    <title>11 STAR CLUB — সেবা, সংস্কৃতি ও একতার প্রতীক | ১১ স্টার ক্লাব</title>
+    <meta name="description" content="১১ স্টার ক্লাব (11 STAR CLUB) — সেবা, সংস্কৃতি ও একতার প্রতীক। দুর্গাপূজা ২০২৬, সামাজিক সেবা, মহালয়া, চিকিৎসা সাহায্য, দরিদ্র সেবা ও স্কলারশিপ।" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700;800;900&family=Hind+Siliguri:wght@400;500;600;700&family=Noto+Serif+Bengali:wght@400;600;700;800;900&display=swap" rel="stylesheet" />
+    <meta property="og:title" content="11 STAR CLUB — সেবা, সংস্কৃতি ও একতার প্রতীক" />
+    <meta property="og:description" content="১১ স্টার ক্লাবের অফিসিয়াল ওয়েবসাইট — দুর্গাপূজা ২০২৬, সমাজসেবা, মহালয়া ও মানবিক উদ্যোগ।" />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#d97706" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="11 Star Club" />
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png" />
+    <link rel="icon" type="image/jpeg" href="/logo_maa_aschen.jpg" />
+  </head>
+  <body class="bg-[#0a0708] text-[#f5eedb] selection:bg-amber-500/30 selection:text-amber-200 antialiased overflow-x-hidden">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
+

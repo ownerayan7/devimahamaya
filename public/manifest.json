@@ -1,0 +1,38 @@
+{
+  "id": "/",
+  "name": "11 STAR CLUB — ১১ স্টার ক্লাব",
+  "short_name": "11 Star Club",
+  "description": "১১ স্টার ক্লাব অফিসিয়াল মোবাইল অ্যাপ — দুর্গাপূজা ২০২৬, লাইভ সম্প্রচার, মহালয়া ও মানবিক সেবা।",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#d97706",
+  "background_color": "#ffffff",
+  "icons": [
+    {
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-maskable-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

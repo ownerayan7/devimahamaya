@@ -1,0 +1,77 @@
+{
+  "entities": {
+    "MemberPhotoItem": {
+      "title": "Member Photo Item",
+      "description": "Represents a photo uploaded by a club member",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "caption": { "type": "string" },
+        "authorName": { "type": "string" },
+        "authorRole": { "type": "string" },
+        "url": { "type": "string" },
+        "category": { "type": "string" },
+        "tag": { "type": "string" },
+        "year": { "type": "string" },
+        "dateAdded": { "type": "string" },
+        "likes": { "type": "number" },
+        "isCustom": { "type": "boolean" }
+      },
+      "required": ["id", "title", "url", "category"]
+    },
+    "ClubPhotoItem": {
+      "title": "Club Photo Item",
+      "description": "Represents an official club photo added by admin",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "subtitle": { "type": "string" },
+        "url": { "type": "string" },
+        "category": { "type": "string" },
+        "tag": { "type": "string" },
+        "year": { "type": "string" },
+        "isCustom": { "type": "boolean" }
+      },
+      "required": ["id", "title", "url", "category"]
+    },
+    "PrayerItem": {
+      "title": "Prayer Item",
+      "description": "Represents an audio, video, or song prayer item",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "bengaliTitle": { "type": "string" },
+        "type": { "type": "string" },
+        "mediaSource": { "type": "string" },
+        "mediaUrl": { "type": "string" },
+        "embedUrl": { "type": "string" },
+        "thumbnailUrl": { "type": "string" },
+        "description": { "type": "string" },
+        "lyrics": { "type": "string" },
+        "authorName": { "type": "string" },
+        "isCustom": { "type": "boolean" }
+      },
+      "required": ["id", "title"]
+    }
+  },
+  "firestore": {
+    "/memberPhotos/{photoId}": {
+      "schema": { "$ref": "MemberPhotoItem" },
+      "description": "Collection of photos uploaded by members"
+    },
+    "/clubPhotos/{photoId}": {
+      "schema": { "$ref": "ClubPhotoItem" },
+      "description": "Collection of official club photos"
+    },
+    "/prayerItems/{prayerId}": {
+      "schema": { "$ref": "PrayerItem" },
+      "description": "Collection of custom prayers"
+    },
+    "/appSettings/{settingId}": {
+      "description": "App runtime configurations (live video settings, etc.)"
+    }
+  }
+}

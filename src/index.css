@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-serif-bn: 'Noto Serif Bengali', serif;
+    --font-sans-bn: 'Hind Siliguri', sans-serif;
+    --font-cinzel: 'Cinzel', serif;
+  }
+
+  body {
+    font-family: var(--font-sans-bn);
+    background-color: #080608;
+    color: #f7f1e5;
+    overflow-x: hidden;
+  }
+
+  h1, h2, h3, .font-serif-bengali {
+    font-family: var(--font-serif-bn);
+  }
+
+  .font-cinzel-title {
+    font-family: var(--font-cinzel);
+  }
+}
+
+/* Custom golden & festive glows */
+.gold-glow {
+  box-shadow: 0 0 35px -5px rgba(234, 179, 8, 0.25), 0 0 15px rgba(245, 158, 11, 0.15);
+}
+
+.gold-glow-lg {
+  box-shadow: 0 0 50px -5px rgba(234, 179, 8, 0.35), 0 0 25px rgba(220, 38, 38, 0.2);
+}
+
+.red-glow {
+  box-shadow: 0 0 35px -5px rgba(220, 38, 38, 0.3);
+}
+
+.text-gold-gradient {
+  background: linear-gradient(135deg, #fff2cc 0%, #ffd700 45%, #e6a100 75%, #ffbe3b 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.text-festive-gradient {
+  background: linear-gradient(135deg, #fff7ed 0%, #fde047 35%, #fb923c 70%, #ef4444 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.glass-card {
+  background: rgba(18, 14, 16, 0.72);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  border: 1px solid rgba(234, 179, 8, 0.18);
+}
+
+.glass-card-hover {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.glass-card-hover:hover {
+  background: rgba(28, 20, 24, 0.85);
+  border-color: rgba(234, 179, 8, 0.45);
+  box-shadow: 0 12px 35px -8px rgba(0, 0, 0, 0.7), 0 0 25px -3px rgba(234, 179, 8, 0.2);
+  transform: translateY(-4px);
+}
+
+.glass-nav {
+  background: rgba(10, 7, 9, 0.78);
+  backdrop-filter: blur(18px);
+  -webkit-backdrop-filter: blur(18px);
+  border-bottom: 1px solid rgba(234, 179, 8, 0.15);
+}
+
+/* Light sweep effect on buttons and cards */
+.light-sweep {
+  position: relative;
+  overflow: hidden;
+}
+
+.light-sweep::after {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -75%;
+  width: 50%;
+  height: 200%;
+  background: linear-gradient(
+    to right,
+    rgba(255, 255, 255, 0) 0%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  transform: rotate(30deg);
+  pointer-events: none;
+  animation: sweep 5s infinite;
+}
+
+@keyframes sweep {
+  0% { left: -75%; opacity: 0; }
+  20% { left: 130%; opacity: 0.6; }
+  100% { left: 130%; opacity: 0; }
+}
+
+/* Continuous, glitch-free sacred icon ring expansion */
+@keyframes iconRingPulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.75;
+  }
+  70% {
+    opacity: 0.3;
+  }
+  100% {
+    transform: scale(1.42);
+    opacity: 0;
+  }
+}
+
+.animate-icon-ring-1 {
+  animation: iconRingPulse 2.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+  will-change: transform, opacity;
+  transform-origin: center;
+}
+
+.animate-icon-ring-2 {
+  animation: iconRingPulse 2.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) infinite;
+  animation-delay: 1.4s;
+  will-change: transform, opacity;
+  transform-origin: center;
+}
+

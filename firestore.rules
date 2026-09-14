@@ -1,0 +1,75 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Member Community Photos
+    match /memberPhotos/{photoId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Member Community Videos
+    match /memberVideos/{videoId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Official Club Photos
+    match /clubPhotos/{photoId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Official Club Videos
+    match /officialVideos/{videoId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Custom Prayer Items (Audio / Video / Lyrics)
+    match /prayerItems/{prayerId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Rabindra Sangeet Collection
+    match /rabindraSongs/{songId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Club Notices & Announcements
+    match /announcements/{announcementId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Push Notifications & Alerts Broadcast
+    match /notifications/{notifId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // App Global Settings (Live stream config, prayer schedule, notifications, etc.)
+    match /appSettings/{settingId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Donations & Community Submissions
+    match /donations/{donationId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // User Feedback & Suggestions
+    match /feedback/{feedbackId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Default deny for unmapped documents
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

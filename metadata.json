@@ -1,0 +1,8 @@
+{
+  "name": "11 STAR CLUB",
+  "description": "অফিসিয়াল ওয়েবসাইট — ১১ স্টার ক্লাব (সেবা, সংস্কৃতি ও একতার প্রতীক)। দুর্গাপূজা ২০২৬, সামাজিক সেবা, মহালয়া, এবং অন্যান্য উদ্যোগ।",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
