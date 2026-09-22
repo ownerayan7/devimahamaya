@@ -27,6 +27,7 @@ import { AdminPhotoAuthModal } from '../components/AdminPhotoAuthModal';
 import { MemberCommunityVideos } from '../components/MemberCommunityVideos';
 import { AdminStorageAccessCard } from '../components/AdminStorageAccessCard';
 import { getVideoBlob, deleteVideoBlob } from '../utils/videoStorageHelper';
+import { copyTextToClipboard } from '../utils/clipboardHelper';
 import { broadcastMediaPlaybackStarted, registerHtmlMediaElement, subscribeToMediaStop } from '../utils/mediaCoordinator';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
@@ -318,11 +319,11 @@ export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) =>
     }
   };
 
-  const handleShare = () => {
+  const handleShare = async () => {
     const url = activeVideoType === 'youtube'
       ? `https://www.youtube.com/watch?v=${activeVideoId}`
       : window.location.href;
-    navigator.clipboard.writeText(url);
+    await copyTextToClipboard(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 2000);
   };

@@ -18,6 +18,7 @@ import {
   Settings
 } from 'lucide-react';
 import { CLUB_INFO } from '../data/clubData';
+import { copyTextToClipboard } from '../utils/clipboardHelper';
 
 interface InstallAppModalProps {
   isOpen: boolean;
@@ -64,8 +65,8 @@ export const InstallAppModal: React.FC<InstallAppModalProps> = ({ isOpen, onClos
     }
   };
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
+  const handleCopyLink = async () => {
+    await copyTextToClipboard(window.location.href);
     setCopied(true);
     setTimeout(() => setCopied(false), 3000);
   };

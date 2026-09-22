@@ -23,6 +23,7 @@ import { MemberVideoUploadModal } from './MemberVideoUploadModal';
 import { getYouTubeThumbnail } from '../utils/youtubeHelper';
 import { CLUB_INFO } from '../data/clubData';
 import { deleteVideoBlob, getVideoBlob } from '../utils/videoStorageHelper';
+import { copyTextToClipboard } from '../utils/clipboardHelper';
 import { broadcastMediaPlaybackStarted, registerHtmlMediaElement } from '../utils/mediaCoordinator';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
@@ -252,9 +253,9 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
     }
   };
 
-  const handleShare = (e: React.MouseEvent, url: string, id: string) => {
+  const handleShare = async (e: React.MouseEvent, url: string, id: string) => {
     e.stopPropagation();
-    navigator.clipboard.writeText(url || window.location.href);
+    await copyTextToClipboard(url || window.location.href);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };

@@ -30,7 +30,6 @@ import { ShoppingPage } from './pages/ShoppingPage';
 import { ContactPage } from './pages/ContactPage';
 import { AboutPage } from './pages/AboutPage';
 import { GalleryPage } from './pages/GalleryPage';
-import { FcmGeminiPage } from './pages/FcmGeminiPage';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
 import { ArrowUp, MapPin, MessageSquare, ShieldCheck, Mail } from 'lucide-react';
 import { CLUB_INFO } from './data/clubData';
@@ -178,8 +177,6 @@ export function App() {
         return <AboutPage />;
       case 'gallery':
         return <GalleryPage onOpenAdminStorage={() => setIsAdminStorageOpen(true)} />;
-      case 'fcm-gemini':
-        return <FcmGeminiPage />;
       default:
         return (
           <HomePage
