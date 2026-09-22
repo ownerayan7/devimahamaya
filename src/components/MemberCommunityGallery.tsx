@@ -21,7 +21,18 @@ import { collection, onSnapshot, setDoc, deleteDoc, doc, updateDoc } from 'fireb
 import { sendAppNotification } from '../utils/notificationHelper';
 
 export const MemberCommunityGallery: React.FC = () => {
-  const [memberPhotos, setMemberPhotos] = useState<MemberPhotoItem[]>([]);
+  const [memberPhotos, setMemberPhotos] = useState<MemberPhotoItem[]>(() => {
+    try {
+      const saved = localStorage.getItem('11star_member_photos_storage');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed;
+        }
+      }
+    } catch {}
+    return INITIAL_MEMBER_PHOTOS;
+  });
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
@@ -44,10 +55,14 @@ export const MemberCommunityGallery: React.FC = () => {
       });
       // Sort in memory so newest user photos are first
       photos.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
-      setMemberPhotos(photos.length > 0 ? photos : INITIAL_MEMBER_PHOTOS);
+      if (photos.length > 0) {
+        setMemberPhotos(photos);
+        try {
+          localStorage.setItem('11star_member_photos_storage', JSON.stringify(photos));
+        } catch {}
+      }
     }, (err) => {
       console.warn('Firestore memberPhotos sync notice:', err);
-      setMemberPhotos(INITIAL_MEMBER_PHOTOS);
     });
 
     return () => unsubscribe();
@@ -218,11 +233,8 @@ export const MemberCommunityGallery: React.FC = () => {
           </button>
         </div>
       ) : (
-        <motion.div
-          layout
-          className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-        >
-          <AnimatePresence>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <AnimatePresence mode="popLayout">
             {filteredPhotos.map((photo, index) => {
               const isLiked = !!likedMap[photo.id];
               const likes = photo.likes || 0;
@@ -230,13 +242,12 @@ export const MemberCommunityGallery: React.FC = () => {
               return (
                 <motion.div
                   key={photo.id}
-                  layout
                   initial={{ opacity: 0, scale: 0.95 }}
                   animate={{ opacity: 1, scale: 1 }}
                   exit={{ opacity: 0, scale: 0.95 }}
-                  transition={{ duration: 0.25 }}
+                  transition={{ duration: 0.2 }}
                   onClick={() => setSelectedPhotoIndex(index)}
-                  className="group relative cursor-pointer overflow-hidden rounded-2xl border border-emerald-500/25 bg-stone-900/80 shadow-lg hover:border-emerald-400 hover:shadow-[0_0_25px_rgba(16,185,129,0.2)] transition-all flex flex-col"
+                  className="group relative cursor-pointer overflow-hidden rounded-2xl border border-emerald-500/25 bg-stone-900/80 shadow-lg hover:border-emerald-400 hover:shadow-[0_0_25px_rgba(16,185,129,0.2)] transition-all duration-200 flex flex-col"
                 >
                   {/* Photo Container */}
                   <div className="relative aspect-[4/3] w-full overflow-hidden bg-black/80">
@@ -339,7 +350,7 @@ export const MemberCommunityGallery: React.FC = () => {
               );
             })}
           </AnimatePresence>
-        </motion.div>
+        </div>
       )}
 
       {/* Upload Modal */}

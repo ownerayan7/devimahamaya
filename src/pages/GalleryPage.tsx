@@ -17,13 +17,19 @@ import { ImageLightbox } from '../components/ImageLightbox';
 import { AddPhotoModal } from '../components/AddPhotoModal';
 import { AdminPhotoAuthModal } from '../components/AdminPhotoAuthModal';
 import { MemberCommunityGallery } from '../components/MemberCommunityGallery';
+import { AdminStorageAccessCard } from '../components/AdminStorageAccessCard';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, deleteDoc, doc } from 'firebase/firestore';
 import { sendAppNotification } from '../utils/notificationHelper';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
 
 const LOCAL_STORAGE_KEY = '11star_gallery_custom_photos';
 
-export const GalleryPage: React.FC = () => {
+interface GalleryPageProps {
+  onOpenAdminStorage?: () => void;
+}
+
+export const GalleryPage: React.FC<GalleryPageProps> = ({ onOpenAdminStorage }) => {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -32,34 +38,31 @@ export const GalleryPage: React.FC = () => {
   const [isDeleteAuthOpen, setIsDeleteAuthOpen] = useState(false);
   const [customPhotos, setCustomPhotos] = useState<GalleryPhotoItem[]>([]);
 
-  // Load custom photos from Firestore in real time + localStorage fallback
+  // Load custom photos from Firestore in real time + persistent IndexedDB/localStorage fallback
   useEffect(() => {
-    // 1. Initial load from localStorage
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setCustomPhotos(parsed);
-        }
-      }
-    } catch (e) {
-      console.warn('Failed to load localStorage gallery photos:', e);
-    }
+    let currentLocal: GalleryPhotoItem[] = [];
 
-    // 2. Real-time Firestore sync
+    // 1. Initial load from persistent storage
+    loadPersistentItems<GalleryPhotoItem>(LOCAL_STORAGE_KEY).then((saved) => {
+      if (saved && saved.length > 0) {
+        currentLocal = saved;
+        setCustomPhotos(saved);
+      }
+    });
+
+    // 2. Real-time Firestore sync with merge
     const colRef = collection(db, 'clubPhotos');
     const unsubscribe = onSnapshot(colRef, (snapshot) => {
-      const photos: GalleryPhotoItem[] = [];
+      const cloudPhotos: GalleryPhotoItem[] = [];
       snapshot.forEach((d) => {
-        photos.push({ ...(d.data() as GalleryPhotoItem), id: d.id });
+        cloudPhotos.push({ ...(d.data() as GalleryPhotoItem), id: d.id });
       });
-      // Sort so newest items are first
-      photos.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
-      setCustomPhotos(photos);
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(photos));
-      } catch (e) {}
+
+      loadPersistentItems<GalleryPhotoItem>(LOCAL_STORAGE_KEY).then((local) => {
+        const merged = mergeItemsWithLocal(cloudPhotos, local);
+        setCustomPhotos(merged);
+        savePersistentItems(LOCAL_STORAGE_KEY, merged);
+      });
     }, (err) => {
       console.warn('Firestore clubPhotos sync notice:', err);
     });
@@ -73,11 +76,10 @@ export const GalleryPage: React.FC = () => {
       isCustom: true,
       createdAt: Date.now()
     }));
-    const updated = [...formatted, ...customPhotos];
+    const current = await loadPersistentItems<GalleryPhotoItem>(LOCAL_STORAGE_KEY);
+    const updated = [...formatted, ...current];
     setCustomPhotos(updated);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-    } catch (e) {}
+    await savePersistentItems(LOCAL_STORAGE_KEY, updated);
 
     // Save each new photo to Firestore with exact matching doc ID
     for (const item of formatted) {
@@ -120,9 +122,7 @@ export const GalleryPage: React.FC = () => {
     const idStr = String(photoToDeleteId);
     const updated = customPhotos.filter((p) => p.id !== photoToDeleteId);
     setCustomPhotos(updated);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-    } catch (e) {}
+    await savePersistentItems(LOCAL_STORAGE_KEY, updated);
     try {
       await deleteDoc(doc(db, 'clubPhotos', idStr));
     } catch (err) {
@@ -237,21 +237,17 @@ export const GalleryPage: React.FC = () => {
       </motion.div>
 
       {/* Gallery Grid */}
-      <motion.div
-        layout
-        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"
-      >
-        <AnimatePresence>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <AnimatePresence mode="popLayout">
           {filteredItems.map((photo, index) => (
             <motion.div
               key={photo.id}
-              layout
-              initial={{ opacity: 0, scale: 0.92 }}
+              initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.92 }}
-              transition={{ duration: 0.3 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.2 }}
               onClick={() => setSelectedIndex(index)}
-              className="group relative cursor-pointer overflow-hidden rounded-2xl border border-amber-500/25 bg-black/70 aspect-[4/3] shadow-lg hover:border-amber-400 hover:scale-[1.02] transition-all"
+              className="group relative cursor-pointer overflow-hidden rounded-2xl border border-amber-500/25 bg-black/70 aspect-[4/3] shadow-lg hover:border-amber-400 hover:scale-[1.02] transition-all duration-200"
             >
               <img
                 src={photo.url}
@@ -300,7 +296,7 @@ export const GalleryPage: React.FC = () => {
             </motion.div>
           ))}
         </AnimatePresence>
-      </motion.div>
+      </div>
 
       {/* Google Drive Full Photo Archive Integration Card (Placed at the bottom after photos) */}
       <motion.div
@@ -418,6 +414,11 @@ export const GalleryPage: React.FC = () => {
         submitButtonText="পাসওয়ার্ড যাচাই করে নিশ্চিত মুছুন"
         isDangerousAction={true}
       />
+
+      {/* Admin Locked Club Storage Access */}
+      <div className="px-4 sm:px-6 lg:px-8 mt-12">
+        <AdminStorageAccessCard onOpenAdminStorage={onOpenAdminStorage} />
+      </div>
     </div>
   );
 };

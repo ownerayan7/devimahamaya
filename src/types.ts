@@ -17,7 +17,8 @@ export type PageId =
   | 'contact'
   | 'about'
   | 'gallery'
-  | 'settings';
+  | 'settings'
+  | 'fcm-gemini';
 
 export interface PrayerItem {
   id: string;

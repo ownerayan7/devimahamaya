@@ -6,9 +6,9 @@
 
 export async function optimizeImage(
   fileOrBlob: File | Blob,
-  maxWidth = 1280,
-  maxHeight = 1280,
-  quality = 0.82
+  maxWidth = 1000,
+  maxHeight = 1000,
+  quality = 0.75
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     // If it's already an svg or gif, read as dataURL directly
@@ -42,25 +42,36 @@ export async function optimizeImage(
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
-        // Fallback to FileReader
         const reader = new FileReader();
         reader.onload = () => resolve(reader.result as string);
         reader.readAsDataURL(fileOrBlob);
         return;
       }
 
-      // Draw and compress
+      // Draw image to canvas
       ctx.drawImage(img, 0, 0, width, height);
 
-      // Try webp first, fallback to jpeg
+      let currentQuality = quality;
       let dataUrl = '';
       try {
-        dataUrl = canvas.toDataURL('image/webp', quality);
+        dataUrl = canvas.toDataURL('image/webp', currentQuality);
         if (!dataUrl.startsWith('data:image/webp')) {
-          dataUrl = canvas.toDataURL('image/jpeg', quality);
+          dataUrl = canvas.toDataURL('image/jpeg', currentQuality);
         }
       } catch {
-        dataUrl = canvas.toDataURL('image/jpeg', quality);
+        dataUrl = canvas.toDataURL('image/jpeg', currentQuality);
+      }
+
+      // If compressed size is over 300KB (~400,000 characters in base64), downscale quality further
+      if (dataUrl.length > 350000) {
+        try {
+          dataUrl = canvas.toDataURL('image/webp', 0.55);
+          if (!dataUrl.startsWith('data:image/webp')) {
+            dataUrl = canvas.toDataURL('image/jpeg', 0.55);
+          }
+        } catch {
+          dataUrl = canvas.toDataURL('image/jpeg', 0.55);
+        }
       }
 
       resolve(dataUrl);

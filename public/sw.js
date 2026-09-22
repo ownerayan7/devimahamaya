@@ -80,9 +80,10 @@ self.addEventListener('push', (event) => {
     body: data.body || data.message || '11 স্টার ক্লাব থেকে নতুন বার্তা এসেছে।',
     icon: '/icon.png',
     badge: '/pwa-192x192.png',
-    vibrate: [250, 100, 250, 100, 250],
+    vibrate: [300, 100, 300, 100, 300],
     tag: data.tag || `11star-alert-${Date.now()}`,
     renotify: true,
+    requireInteraction: true, // Keeps notification visible on lock screen until user interacts
     data: {
       url: data.url || '/',
       timestamp: Date.now()
@@ -97,6 +98,23 @@ self.addEventListener('push', (event) => {
   );
 });
 
+// Periodic Background Sync for checking prayer times or updates when app is closed
+self.addEventListener('periodicsync', (event) => {
+  if (event.tag === '11star-prayer-sync') {
+    event.waitUntil(
+      self.registration.showNotification('🕊️ 11 স্টার ক্লাব প্রার্থনা আপডেট', {
+        body: 'আজ রবিবারের সান্ধ্য প্রার্থনা ও সঙ্গীত সভার সময়সূচী পরীক্ষা করা হয়েছে।',
+        icon: '/icon.png',
+        badge: '/pwa-192x192.png',
+        vibrate: [200, 100, 200],
+        tag: '11star-periodic-reminder',
+        requireInteraction: false,
+        data: { url: '/sunday-prayer' }
+      })
+    );
+  }
+});
+
 // Client message listener to dispatch lockscreen native notifications through Service Worker
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SHOW_LOCKSCREEN_NOTIFICATION') {
@@ -105,9 +123,10 @@ self.addEventListener('message', (event) => {
       body: options?.body || '',
       icon: options?.icon || '/icon.png',
       badge: options?.badge || '/pwa-192x192.png',
-      vibrate: options?.vibrate || [250, 100, 250, 100, 250],
+      vibrate: options?.vibrate || [300, 100, 300, 100, 300],
       tag: options?.tag || `11star-notif-${Date.now()}`,
       renotify: true,
+      requireInteraction: true, // Ensures lock screen visibility
       silent: options?.silent ?? false,
       data: options?.data || { url: '/' },
       actions: [

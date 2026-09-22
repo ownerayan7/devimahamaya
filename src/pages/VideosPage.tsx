@@ -25,11 +25,13 @@ import { VideoItem } from '../types';
 import { AddOfficialVideoModal } from '../components/AddOfficialVideoModal';
 import { AdminPhotoAuthModal } from '../components/AdminPhotoAuthModal';
 import { MemberCommunityVideos } from '../components/MemberCommunityVideos';
+import { AdminStorageAccessCard } from '../components/AdminStorageAccessCard';
 import { getVideoBlob, deleteVideoBlob } from '../utils/videoStorageHelper';
 import { broadcastMediaPlaybackStarted, registerHtmlMediaElement, subscribeToMediaStop } from '../utils/mediaCoordinator';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { sendAppNotification } from '../utils/notificationHelper';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
 
 const LOCAL_STORAGE_KEY = '11star_custom_official_videos_v2';
 
@@ -44,7 +46,11 @@ const getCreatedTimestamp = (v: any): number => {
   return 0;
 };
 
-export const VideosPage: React.FC = () => {
+interface VideosPageProps {
+  onOpenAdminStorage?: () => void;
+}
+
+export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) => {
   // 1. Initialize customVideos synchronously from localStorage sorted newest-first
   const [customVideos, setCustomVideos] = useState<VideoItem[]>(() => {
     try {
@@ -113,26 +119,20 @@ export const VideosPage: React.FC = () => {
     return () => unsub();
   }, [activeVideoId]);
 
-  // Load custom official videos from localStorage + Firestore in real time
+  // Load custom official videos from persistent storage + Firestore in real time
   useEffect(() => {
-    // 1. LocalStorage initial load
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          const sorted = [...parsed].sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
-          setCustomVideos(sorted);
-          if (!hasUserManuallySelectedRef.current && sorted.length > 0) {
-            handleSelectVideo(sorted[0], false, false);
-          }
+    // 1. Initial persistent load
+    loadPersistentItems<VideoItem>(LOCAL_STORAGE_KEY).then((saved) => {
+      if (saved && saved.length > 0) {
+        const sorted = [...saved].sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
+        setCustomVideos(sorted);
+        if (!hasUserManuallySelectedRef.current && sorted.length > 0) {
+          handleSelectVideo(sorted[0], false, false);
         }
       }
-    } catch (e) {
-      console.error('Failed to load custom videos:', e);
-    }
+    });
 
-    // 2. Real-time Firestore sync
+    // 2. Real-time Firestore sync with merge
     try {
       const unsub = onSnapshot(
         collection(db, 'officialVideos'),
@@ -144,17 +144,17 @@ export const VideosPage: React.FC = () => {
               id: docSnap.id,
             });
           });
-          firestoreList.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
-          if (firestoreList.length > 0) {
-            setCustomVideos(firestoreList);
-            try {
-              localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(firestoreList));
-            } catch {}
-            // If user hasn't explicitly clicked a different video to play, set the last uploaded video as the top active video!
-            if (!hasUserManuallySelectedRef.current) {
-              handleSelectVideo(firestoreList[0], false, false);
+
+          loadPersistentItems<VideoItem>(LOCAL_STORAGE_KEY).then((local) => {
+            const merged = mergeItemsWithLocal(firestoreList, local);
+            merged.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
+            setCustomVideos(merged);
+            savePersistentItems(LOCAL_STORAGE_KEY, merged);
+
+            if (!hasUserManuallySelectedRef.current && merged.length > 0) {
+              handleSelectVideo(merged[0], false, false);
             }
-          }
+          });
         },
         (err) => {
           console.warn('Firestore officialVideos snapshot notice:', err);
@@ -193,11 +193,7 @@ export const VideosPage: React.FC = () => {
 
   const saveCustomVideos = (items: VideoItem[]) => {
     setCustomVideos(items);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
-    } catch (e) {
-      console.error('Failed to save custom videos:', e);
-    }
+    savePersistentItems(LOCAL_STORAGE_KEY, items);
   };
 
   const handleAddOfficialVideo = async (newVideo: VideoItem) => {
@@ -756,6 +752,11 @@ export const VideosPage: React.FC = () => {
         onClose={() => setIsAddOfficialOpen(false)}
         onAddVideo={handleAddOfficialVideo}
       />
+
+      {/* Admin Locked Club Storage Access */}
+      <div className="px-4 sm:px-6 lg:px-8 mt-12">
+        <AdminStorageAccessCard onOpenAdminStorage={onOpenAdminStorage} />
+      </div>
     </div>
   );
 };

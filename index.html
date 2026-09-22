@@ -49,6 +49,21 @@
     <link rel="icon" type="image/png" sizes="192x192" href="/pwa-192x192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/pwa-512x512.png" />
     <link rel="icon" type="image/jpeg" href="/logo_maa_aschen.jpg" />
+    <!-- OneSignal Web Push SDK (matching 11starclub.site notification process) -->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      window.OneSignalDeferred.push(async function(OneSignal) {
+        try {
+          await OneSignal.init({
+            appId: "11starclub-official-push-app",
+            safari_web_id: "",
+            notifyButton: { enable: true },
+            allowLocalhostAsSecureOrigin: true
+          });
+        } catch (e) {}
+      });
+    </script>
   </head>
   <body class="bg-[#0a0708] text-[#f5eedb] selection:bg-amber-500/30 selection:text-amber-200 antialiased overflow-x-hidden">
     <div id="root"></div>

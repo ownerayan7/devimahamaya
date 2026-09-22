@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { 
   X, Lock, ShieldCheck, Mail, Phone, Calendar, Trash2, 
-  CheckCircle2, AlertCircle, Search, RefreshCw, KeyRound, ExternalLink, Download, MessageSquare
+  CheckCircle2, AlertCircle, Search, RefreshCw, KeyRound, ExternalLink, Download, MessageSquare, Eye, EyeOff
 } from "lucide-react";
 import { CLUB_INFO } from "../data/clubData";
 
@@ -89,6 +89,7 @@ interface AdminInboxModalProps {
 export const AdminInboxModal: React.FC<AdminInboxModalProps> = ({ isOpen, onClose }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [pinInput, setPinInput] = useState<string>("");
+  const [showPassword, setShowPassword] = useState<boolean>(false);
   const [pinError, setPinError] = useState<string>("");
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -104,6 +105,7 @@ export const AdminInboxModal: React.FC<AdminInboxModalProps> = ({ isOpen, onClos
       loadMessages();
       setIsAuthenticated(false);
       setPinInput("");
+      setShowPassword(false);
       setPinError("");
     }
   }, [isOpen]);
@@ -249,16 +251,24 @@ export const AdminInboxModal: React.FC<AdminInboxModalProps> = ({ isOpen, onClos
               <div className="relative">
                 <KeyRound className="w-5 h-5 text-amber-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                 <input
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   placeholder="পাসওয়ার্ড লিখুন..."
                   value={pinInput || ""}
                   onChange={(e) => {
                     setPinInput(e.target.value);
                     setPinError("");
                   }}
-                  className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl py-3 pl-11 pr-4 text-white text-sm outline-none transition shadow-inner font-mono"
+                  className="w-full bg-slate-950 border border-slate-700 focus:border-amber-500 rounded-xl py-3 pl-11 pr-12 text-white text-sm outline-none transition shadow-inner font-mono"
                   autoFocus
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-amber-300 transition-colors p-1"
+                  title={showPassword ? "পাসওয়ার্ড লুকান" : "পাসওয়ার্ড দেখান"}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
               </div>
 
               {pinError && (

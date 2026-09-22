@@ -81,8 +81,6 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({ reducedM
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
         ctx.fillStyle = `${p.color}${Math.max(0.05, Math.min(0.85, p.alpha))})`;
-        ctx.shadowBlur = p.radius * 4;
-        ctx.shadowColor = 'rgba(245, 158, 11, 0.5)';
         ctx.fill();
       });
 

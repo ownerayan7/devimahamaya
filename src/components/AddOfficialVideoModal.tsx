@@ -21,6 +21,7 @@ import {
 import { VideoItem } from '../types';
 import { extractYouTubeId, getYouTubeThumbnail, formatYouTubeWatchUrl } from '../utils/youtubeHelper';
 import { generateVideoThumbnail, saveVideoBlob } from '../utils/videoStorageHelper';
+import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 interface AddOfficialVideoModalProps {
   isOpen: boolean;
@@ -154,7 +155,24 @@ export const AddOfficialVideoModal: React.FC<AddOfficialVideoModalProps> = ({
       };
 
       onAddVideo(newVideo);
-      setSuccess('YouTube ভিডিওটি সফলভাবে পেজে যুক্ত হয়েছে!');
+      
+      // Persist to Permanent Storage
+      try {
+        await saveClubStoredItem({
+          title: newVideo.title,
+          type: 'video',
+          source: 'online',
+          url: newVideo.youtubeUrl || '',
+          thumbnailUrl: newVideo.thumbnailUrl,
+          authorName: 'অ্যাডমিন (অফিসিয়াল YouTube)',
+          description: newVideo.description,
+          category: newVideo.category
+        });
+      } catch (e) {
+        console.warn('Permanent storage sync failed:', e);
+      }
+
+      setSuccess('YouTube ভিডিওটি সফলভাবে পেজে ও স্থায়ী স্টোরেজে যুক্ত হয়েছে!');
     } else {
       // Gallery Video
       if (!videoFile && !videoFilePreview) {
@@ -192,7 +210,24 @@ export const AddOfficialVideoModal: React.FC<AddOfficialVideoModalProps> = ({
       };
 
       onAddVideo(newVideo);
-      setSuccess('গ্যালারি ভিডিওটি সফলভাবে পেজে যুক্ত হয়েছে!');
+
+      // Persist to Permanent Storage
+      try {
+        await saveClubStoredItem({
+          title: newVideo.title,
+          type: 'video',
+          source: 'device',
+          url: newVideo.videoFileUrl || '',
+          thumbnailUrl: newVideo.thumbnailUrl,
+          authorName: 'অ্যাডমিন (অফিসিয়াল গ্যালারি)',
+          description: newVideo.description,
+          category: newVideo.category
+        });
+      } catch (e) {
+        console.warn('Permanent storage sync failed:', e);
+      }
+
+      setSuccess('গ্যালারি ভিডিওটি সফলভাবে পেজে ও স্থায়ী স্টোরেজে যুক্ত হয়েছে!');
     }
 
     setTimeout(() => {

@@ -18,6 +18,7 @@ import { MemberPhotoItem } from '../types';
 import { getDriveDirectImageUrl } from '../utils/driveHelper';
 import { getAppStorage } from '../lib/firebase';
 import { optimizeImage } from '../utils/imageOptimizer';
+import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 interface MemberPhotoUploadModalProps {
   isOpen: boolean;
@@ -166,7 +167,20 @@ export const MemberPhotoUploadModal: React.FC<MemberPhotoUploadModalProps> = ({
     };
 
     onAddPhoto(newPhoto);
-    setSuccessMsg('আপনার তোলা ছবিটি সফলভাবে সদস্য গ্যালারিতে যুক্ত হয়েছে!');
+    try {
+      await saveClubStoredItem({
+        title: title.trim(),
+        type: 'photo',
+        source: tab === 'upload' ? 'device' : 'online',
+        url: finalImageUrl,
+        authorName: authorName.trim() || 'ক্লাব সদস্য',
+        description: caption.trim() || 'সদস্যের আপলোডকৃত ছবি',
+        category: category
+      });
+    } catch (e) {
+      console.warn('Permanent storage sync warning:', e);
+    }
+    setSuccessMsg('আপনার তোলা ছবিটি সফলভাবে সদস্য গ্যালারিতে ও স্থায়ী ডাটা স্টোরেজে যুক্ত হয়েছে!');
     setTimeout(() => {
       onClose();
     }, 1200);

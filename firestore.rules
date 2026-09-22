@@ -67,6 +67,18 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    // Tree Plantation Photos
+    match /treePlantationPhotos/{photoId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
+    // Permanent Club Data Storage
+    match /clubDataStorage/{itemId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // Default deny for unmapped documents
     match /{document=**} {
       allow read, write: if false;

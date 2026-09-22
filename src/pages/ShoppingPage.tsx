@@ -25,7 +25,7 @@ export const ShoppingPage: React.FC = () => {
   ];
 
   return (
-    <div className="pt-24 sm:pt-28 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
+    <div className="pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
       {/* Header Banner */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

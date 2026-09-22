@@ -17,7 +17,9 @@ import { CLUB_INFO, TREE_PLANTATION_PHOTOS } from '../data/clubData';
 import { TreePlantationPhotoItem } from '../types';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { AddPhotoModal } from '../components/AddPhotoModal';
-import { AdminPhotoAuthModal } from '../components/AdminPhotoAuthModal';
+import { db } from '../lib/firebase';
+import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
 
 const LOCAL_STORAGE_KEY = '11star_tree_plantation_custom_photos';
 
@@ -30,28 +32,44 @@ export const TreePlantationPage: React.FC = () => {
   const [isDeleteAuthOpen, setIsDeleteAuthOpen] = useState(false);
   const [customPhotos, setCustomPhotos] = useState<TreePlantationPhotoItem[]>([]);
 
-  // Load custom photos on mount
+  // Load custom photos on mount + Firestore real-time listener
   useEffect(() => {
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed)) {
-          setCustomPhotos(parsed);
-        }
+    // 1. Initial persistent load
+    loadPersistentItems<TreePlantationPhotoItem>(LOCAL_STORAGE_KEY).then((saved) => {
+      if (saved && saved.length > 0) {
+        setCustomPhotos(saved);
       }
+    });
+
+    // 2. Real-time Firestore sync with merge
+    try {
+      const unsub = onSnapshot(
+        collection(db, 'treePlantationPhotos'),
+        (snapshot) => {
+          const cloudPhotos: TreePlantationPhotoItem[] = [];
+          snapshot.forEach((d) => {
+            cloudPhotos.push({ ...(d.data() as TreePlantationPhotoItem), id: d.id });
+          });
+
+          loadPersistentItems<TreePlantationPhotoItem>(LOCAL_STORAGE_KEY).then((local) => {
+            const merged = mergeItemsWithLocal(cloudPhotos, local);
+            setCustomPhotos(merged);
+            savePersistentItems(LOCAL_STORAGE_KEY, merged);
+          });
+        },
+        (err) => {
+          console.warn('Firestore treePlantationPhotos snapshot notice:', err);
+        }
+      );
+      return () => unsub();
     } catch (e) {
-      console.error('Failed to load custom tree photos:', e);
+      console.warn('Firestore sync fallback:', e);
     }
   }, []);
 
-  const saveCustomPhotos = (items: TreePlantationPhotoItem[]) => {
+  const saveCustomPhotos = async (items: TreePlantationPhotoItem[]) => {
     setCustomPhotos(items);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(items));
-    } catch (e) {
-      console.error('Failed to save custom tree photos:', e);
-    }
+    await savePersistentItems(LOCAL_STORAGE_KEY, items);
   };
 
   const handleOpenOfficialAddPhoto = () => {
@@ -59,14 +77,25 @@ export const TreePlantationPage: React.FC = () => {
     setIsAdminAuthModalOpen(true);
   };
 
-  const handleAddPhotos = (newItems: any[]) => {
+  const handleAddPhotos = async (newItems: any[]) => {
     const formatted: TreePlantationPhotoItem[] = newItems.map((item) => ({
       ...item,
       isCustom: true,
       year: item.year || '২০২৬',
+      createdAt: Date.now()
     }));
-    const updated = [...formatted, ...customPhotos];
-    saveCustomPhotos(updated);
+    const current = await loadPersistentItems<TreePlantationPhotoItem>(LOCAL_STORAGE_KEY);
+    const updated = [...formatted, ...current];
+    await saveCustomPhotos(updated);
+
+    // Save to Firestore
+    for (const item of formatted) {
+      try {
+        await setDoc(doc(db, 'treePlantationPhotos', String(item.id)), item);
+      } catch (err) {
+        console.warn('Failed to save tree plantation photo to Firestore:', err);
+      }
+    }
   };
 
   const handlePromptDeleteCustomPhoto = (e: React.MouseEvent, id: string) => {
@@ -75,10 +104,17 @@ export const TreePlantationPage: React.FC = () => {
     setIsDeleteAuthOpen(true);
   };
 
-  const handleConfirmDeleteCustomPhoto = () => {
+  const handleConfirmDeleteCustomPhoto = async () => {
     if (!photoToDeleteId) return;
+    const idStr = String(photoToDeleteId);
     const updated = customPhotos.filter((p) => p.id !== photoToDeleteId);
-    saveCustomPhotos(updated);
+    await saveCustomPhotos(updated);
+
+    try {
+      await deleteDoc(doc(db, 'treePlantationPhotos', idStr));
+    } catch (err) {
+      console.warn('Failed to delete tree photo from Firestore:', err);
+    }
     setPhotoToDeleteId(null);
     setIsDeleteAuthOpen(false);
   };
@@ -246,16 +282,15 @@ export const TreePlantationPage: React.FC = () => {
         </div>
 
         {/* Photos Grid */}
-        <motion.div layout className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <AnimatePresence>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          <AnimatePresence mode="popLayout">
             {filteredPhotos.map((photo, idx) => (
               <motion.div
                 key={photo.id}
-                layout
                 initial={{ opacity: 0, scale: 0.95 }}
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.9 }}
-                transition={{ duration: 0.3 }}
+                transition={{ duration: 0.2 }}
                 onClick={() => setSelectedPhotoIndex(idx)}
                 className="group cursor-pointer rounded-2xl overflow-hidden glass-card border border-emerald-500/25 hover:border-emerald-400/60 shadow-lg hover:shadow-[0_0_25px_rgba(16,185,129,0.2)] transition-all hover:-translate-y-1 relative"
               >
@@ -322,7 +357,7 @@ export const TreePlantationPage: React.FC = () => {
               </motion.div>
             ))}
           </AnimatePresence>
-        </motion.div>
+        </div>
       </div>
 
       {/* Google Drive Full Album Integration Card (Placed strictly at the bottom after all photos) */}

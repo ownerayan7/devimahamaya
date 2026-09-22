@@ -14,6 +14,7 @@ import {
 import { RabindraSongItem } from '../types';
 import { parseUniversalMedia } from '../utils/mediaEmbedHelper';
 import { sendAppNotification } from '../utils/notificationHelper';
+import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 interface AddRabindraSangeetModalProps {
   isOpen: boolean;
@@ -75,6 +76,17 @@ export const AddRabindraSangeetModal: React.FC<AddRabindraSangeetModalProps> = (
     };
 
     onAddSong(newSong);
+
+    // Persist to Permanent Storage
+    saveClubStoredItem({
+      title: newSong.title,
+      type: 'audio',
+      source: 'online',
+      url: newSong.mediaUrl,
+      authorName: newSong.artist,
+      description: newSong.description,
+      category: 'rabindra-sangeet'
+    }).catch(console.warn);
 
     // Send automatic notification
     sendAppNotification(

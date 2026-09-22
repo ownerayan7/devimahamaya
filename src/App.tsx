@@ -6,6 +6,7 @@ import { WelcomeScreen } from './components/WelcomeScreen';
 import { Navbar } from './components/Navbar';
 import { Footer } from './components/Footer';
 import { AdminInboxModal } from './components/AdminInboxModal';
+import { AdminClubStorageModal } from './components/AdminClubStorageModal';
 import { InstallAppModal } from './components/InstallAppModal';
 import { AdminLoginModal } from './components/AdminLoginModal';
 import { GlobalMediaPlayer } from './components/GlobalMediaPlayer';
@@ -29,6 +30,7 @@ import { ShoppingPage } from './pages/ShoppingPage';
 import { ContactPage } from './pages/ContactPage';
 import { AboutPage } from './pages/AboutPage';
 import { GalleryPage } from './pages/GalleryPage';
+import { FcmGeminiPage } from './pages/FcmGeminiPage';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
 import { ArrowUp, MapPin, MessageSquare, ShieldCheck, Mail } from 'lucide-react';
 import { CLUB_INFO } from './data/clubData';
@@ -46,6 +48,7 @@ export function App() {
   const [currentPage, setCurrentPage] = useState<PageId>('home');
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [isAdminInboxOpen, setIsAdminInboxOpen] = useState(false);
+  const [isAdminStorageOpen, setIsAdminStorageOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
 
@@ -123,7 +126,7 @@ export function App() {
       return;
     }
     setCurrentPage(page);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    window.scrollTo(0, 0);
   };
 
   const scrollToTop = () => {
@@ -133,9 +136,16 @@ export function App() {
   const renderCurrentPage = () => {
     switch (currentPage) {
       case 'home':
-        return <HomePage onNavigate={handleNavigate} onOpenInstallModal={() => setIsInstallModalOpen(true)} />;
+        return (
+          <HomePage
+            onNavigate={handleNavigate}
+            onOpenInstallModal={() => setIsInstallModalOpen(true)}
+            onReplayWelcome={handleReplayWelcome}
+            onOpenAdminStorage={() => setIsAdminStorageOpen(true)}
+          />
+        );
       case 'durga-puja':
-        return <DurgaPujaPage />;
+        return <DurgaPujaPage onOpenAdminStorage={() => setIsAdminStorageOpen(true)} />;
       case 'prayer':
         return <SundayPrayerPage />;
       case 'rabindra-sangeet':
@@ -153,7 +163,7 @@ export function App() {
       case 'donate':
         return <DonatePage />;
       case 'videos':
-        return <VideosPage />;
+        return <VideosPage onOpenAdminStorage={() => setIsAdminStorageOpen(true)} />;
       case 'mahalaya':
         return <MahalayaPage />;
       case 'radio':
@@ -167,13 +177,16 @@ export function App() {
       case 'about':
         return <AboutPage />;
       case 'gallery':
-        return <GalleryPage />;
+        return <GalleryPage onOpenAdminStorage={() => setIsAdminStorageOpen(true)} />;
+      case 'fcm-gemini':
+        return <FcmGeminiPage />;
       default:
         return (
           <HomePage
             onNavigate={handleNavigate}
             onOpenInstallModal={() => setIsInstallModalOpen(true)}
             onReplayWelcome={handleReplayWelcome}
+            onOpenAdminStorage={() => setIsAdminStorageOpen(true)}
           />
         );
     }
@@ -203,6 +216,7 @@ export function App() {
           reducedMotion={reducedMotion}
           onToggleReducedMotion={handleToggleReducedMotion}
           onOpenAdminInbox={() => setIsAdminInboxOpen(true)}
+          onOpenAdminStorage={() => setIsAdminStorageOpen(true)}
           onOpenInstallModal={() => setIsInstallModalOpen(true)}
           onOpenNotificationModal={() => setIsNotificationModalOpen(true)}
           onReplayWelcome={handleReplayWelcome}
@@ -219,10 +233,10 @@ export function App() {
             <AnimatePresence mode="wait">
               <motion.div
                 key={currentPage}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -10 }}
-                transition={{ duration: 0.35, ease: 'easeOut' }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.2, ease: 'easeOut' }}
               >
                 {renderCurrentPage()}
               </motion.div>
@@ -238,6 +252,12 @@ export function App() {
       <AdminInboxModal
         isOpen={isAdminInboxOpen}
         onClose={() => setIsAdminInboxOpen(false)}
+      />
+
+      {/* Admin Locked Club Data Storage Modal */}
+      <AdminClubStorageModal
+        isOpen={isAdminStorageOpen}
+        onClose={() => setIsAdminStorageOpen(false)}
       />
 
       {/* Install App Guidance Modal */}

@@ -22,6 +22,7 @@ import {
 import { MemberVideoItem } from '../types';
 import { extractYouTubeId, getYouTubeThumbnail, formatYouTubeWatchUrl } from '../utils/youtubeHelper';
 import { generateVideoThumbnail, saveVideoBlob } from '../utils/videoStorageHelper';
+import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 interface MemberVideoUploadModalProps {
   isOpen: boolean;
@@ -161,7 +162,20 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
       };
 
       onAddVideo(newVideo);
-      setSuccess('আপনার ভিডিওটি সফলভাবে সদস্য কর্নারে যুক্ত হয়েছে!');
+      try {
+        await saveClubStoredItem({
+          title: title.trim(),
+          type: 'video',
+          source: 'online',
+          url: formatYouTubeWatchUrl(yId),
+          authorName: authorName.trim() || 'ক্লাব সদস্য',
+          description: description.trim() || 'সদস্যের শেয়ার করা YouTube ভিডিও',
+          category
+        });
+      } catch (e) {
+        console.warn('Storage sync warn:', e);
+      }
+      setSuccess('আপনার ভিডিওটি সফলভাবে সদস্য কর্নারে ও স্থায়ী ডাটা স্টোরেজে যুক্ত হয়েছে!');
     } else {
       // Local gallery video
       if (!videoFile && !videoFilePreview) {
@@ -203,7 +217,21 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
       };
 
       onAddVideo(newVideo);
-      setSuccess('আপনার গ্যালারি ভিডিওটি সফলভাবে সদস্য কর্নারে যুক্ত হয়েছে!');
+      try {
+        await saveClubStoredItem({
+          title: title.trim(),
+          type: 'video',
+          source: 'device',
+          url: videoFilePreview,
+          thumbnailUrl: thumbnailPreview,
+          authorName: authorName.trim() || 'ক্লাব সদস্য',
+          description: description.trim() || 'মোবাইল গ্যালারি ভিডিও',
+          category
+        });
+      } catch (e) {
+        console.warn('Storage sync warn:', e);
+      }
+      setSuccess('আপনার গ্যালারি ভিডিওটি সফলভাবে সদস্য কর্নারে ও স্থায়ী ডাটা স্টোরেজে যুক্ত হয়েছে!');
     }
 
     setTimeout(() => {

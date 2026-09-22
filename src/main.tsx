@@ -52,11 +52,17 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 );
 
-// Register PWA Service Worker for app installability and home screen icon
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch((err) => {
+// Register PWA Service Worker for app installability, background lockscreen notifications, and offline cache
+if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  const registerSW = () => {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((err) => {
       console.warn('PWA service worker registration notice:', err);
     });
-  });
+  };
+
+  if (document.readyState === 'complete') {
+    registerSW();
+  } else {
+    window.addEventListener('load', registerSW);
+  }
 }

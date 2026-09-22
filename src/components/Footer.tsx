@@ -189,9 +189,13 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onReplayWelcome }) =
               )}
             </ul>
           </div>
+        </div>
 
-          {/* Social Services & Forms Column */}
-          <div className="lg:col-span-4 space-y-4">
+
+
+        {/* Social Services & Forms Column & Contact */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 pt-4">
+          <div className="lg:col-span-12 space-y-4">
             <h4 className="text-base font-bold font-serif-bengali text-amber-200 flex items-center gap-2 border-b border-white/10 pb-2">
               <ShieldCheck className="w-4 h-4 text-amber-400" />
               <span>ঠিকানা ও যোগাযোগ</span>

@@ -22,6 +22,7 @@ import { AdminPhotoAuthModal } from './AdminPhotoAuthModal';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { sendAppNotification } from '../utils/notificationHelper';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
 
 const LOCAL_STORAGE_NOTICES_KEY = '11star_custom_announcements_v2';
 
@@ -40,39 +41,33 @@ export const AnnouncementCard: React.FC = () => {
   const [noticeToDeleteId, setNoticeToDeleteId] = useState<string | null>(null);
   const [isDeleteAuthOpen, setIsDeleteAuthOpen] = useState(false);
 
-  // Load custom notices from Firestore & localStorage
+  // Load custom notices from Firestore & persistent storage
   useEffect(() => {
-    // 1. Initial load from localStorage
-    try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_NOTICES_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          setCustomNotices(parsed);
-          setActiveNoticeId(parsed[0].id);
-        }
+    // 1. Initial load from persistent storage
+    loadPersistentItems<Announcement>(LOCAL_STORAGE_NOTICES_KEY).then((saved) => {
+      if (saved && saved.length > 0) {
+        setCustomNotices(saved);
+        setActiveNoticeId(saved[0].id);
       }
-    } catch (e) {
-      console.error('Failed to load custom notices:', e);
-    }
+    });
 
-    // 2. Real-time Firestore sync
+    // 2. Real-time Firestore sync with merge
     const colRef = collection(db, 'announcements');
     const unsub = onSnapshot(colRef, (snapshot) => {
-      const notices: Announcement[] = [];
+      const cloudNotices: Announcement[] = [];
       snapshot.forEach((d) => {
-        notices.push({ ...(d.data() as Announcement), id: d.id });
+        cloudNotices.push({ ...(d.data() as Announcement), id: d.id });
       });
-      notices.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
-      if (notices.length > 0) {
-        setCustomNotices(notices);
-        setActiveNoticeId((prev) => notices.some(n => n.id === prev) ? prev : notices[0].id);
-      } else {
-        setCustomNotices([]);
-      }
-      try {
-        localStorage.setItem(LOCAL_STORAGE_NOTICES_KEY, JSON.stringify(notices));
-      } catch (e) {}
+
+      loadPersistentItems<Announcement>(LOCAL_STORAGE_NOTICES_KEY).then((local) => {
+        const merged = mergeItemsWithLocal(cloudNotices, local);
+        merged.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+        setCustomNotices(merged);
+        if (merged.length > 0) {
+          setActiveNoticeId((prev) => merged.some(n => n.id === prev) ? prev : merged[0].id);
+        }
+        savePersistentItems(LOCAL_STORAGE_NOTICES_KEY, merged);
+      });
     }, (err) => {
       console.warn('Firestore announcements listener notice:', err);
     });
@@ -80,13 +75,9 @@ export const AnnouncementCard: React.FC = () => {
     return () => unsub();
   }, []);
 
-  const saveCustomNotices = (notices: Announcement[]) => {
+  const saveCustomNotices = async (notices: Announcement[]) => {
     setCustomNotices(notices);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_NOTICES_KEY, JSON.stringify(notices));
-    } catch (e) {
-      console.error('Failed to save notices to localStorage:', e);
-    }
+    await savePersistentItems(LOCAL_STORAGE_NOTICES_KEY, notices);
   };
 
   const handleOpenAdminNoticeModal = () => {

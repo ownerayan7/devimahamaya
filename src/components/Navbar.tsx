@@ -22,7 +22,8 @@ import {
   BellRing,
   Music,
   Radio,
-  Settings
+  Settings,
+  Database
 } from 'lucide-react';
 import { PageId } from '../types';
 import { CLUB_INFO } from '../data/clubData';
@@ -35,6 +36,7 @@ interface NavbarProps {
   reducedMotion: boolean;
   onToggleReducedMotion: () => void;
   onOpenAdminInbox?: () => void;
+  onOpenAdminStorage?: () => void;
   onOpenInstallModal?: () => void;
   onOpenNotificationModal?: () => void;
   onReplayWelcome?: () => void;
@@ -46,6 +48,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   reducedMotion,
   onToggleReducedMotion,
   onOpenAdminInbox,
+  onOpenAdminStorage,
   onOpenInstallModal,
   onOpenNotificationModal,
   onReplayWelcome,
@@ -97,6 +100,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'videos', label: 'ভিডিও', icon: <Video className="w-3.5 h-3.5 text-red-400" /> },
     { id: 'shopping', label: 'Online Shopping', isNew: true, icon: <ShoppingBag className="w-3.5 h-3.5 text-amber-400" /> },
     { id: 'donate', label: 'সহযোগিতা', icon: <HeartHandshake className="w-3.5 h-3.5 text-yellow-400" /> },
+    { id: 'fcm-gemini', label: 'FCM Push Guide', isNew: true, icon: <BellRing className="w-3.5 h-3.5 text-amber-400" /> },
     { id: 'contact', label: 'Contact', icon: <Phone className="w-3.5 h-3.5 text-stone-300" /> },
     { id: 'settings', label: 'সেটিংস', icon: <Settings className="w-3.5 h-3.5 text-amber-300" /> },
   ];
@@ -277,6 +281,8 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
+
+
             {/* Replay Welcome Animation Button */}
             {onReplayWelcome && (
               <button
@@ -421,6 +427,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <span>🔒 ক্লাব অ্যাডমিন ইনবক্স</span>
                   </button>
                 )}
+
+
 
                 {onReplayWelcome && (
                   <button

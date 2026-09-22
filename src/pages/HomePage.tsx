@@ -31,14 +31,16 @@ import { PageId } from '../types';
 import { CLUB_INFO, SERVICES_LIST, ACTIVITIES_TIMELINE, FEATURED_VIDEOS } from '../data/clubData';
 import { Countdowns } from '../components/Countdowns';
 import { AnnouncementCard } from '../components/AnnouncementCard';
+import { AdminStorageAccessCard } from '../components/AdminStorageAccessCard';
 
 interface HomePageProps {
   onNavigate: (page: PageId) => void;
   onOpenInstallModal?: () => void;
   onReplayWelcome?: () => void;
+  onOpenAdminStorage?: () => void;
 }
 
-export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onOpenInstallModal, onReplayWelcome }) => {
+export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onOpenInstallModal, onReplayWelcome, onOpenAdminStorage }) => {
 
   return (
     <div className="space-y-16 sm:space-y-24 pb-16">
@@ -176,19 +178,6 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onOpenInstallMod
                 <span>রেডিও</span>
               </button>
             </div>
-
-            {/* Replay Welcome Animation Hero Button */}
-            {onReplayWelcome && (
-              <div className="w-full flex justify-center pt-2">
-                <button
-                  onClick={onReplayWelcome}
-                  className="w-full max-w-[240px] sm:max-w-[280px] py-2.5 px-4 rounded-xl bg-gradient-to-r from-red-950 via-amber-950 to-red-950 hover:from-red-900 hover:to-amber-900 border border-amber-400/60 text-amber-200 font-bold text-xs sm:text-sm transition-all shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
-                >
-                  <Sparkles className="w-4 h-4 text-amber-400 animate-spin-slow shrink-0" />
-                  <span>✨ উৎসব আগমনী অ্যানিমেশন দেখুন</span>
-                </button>
-              </div>
-            )}
           </motion.div>
         </div>
       </section>
@@ -538,6 +527,11 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onOpenInstallMod
               </div>
             </div>
           </div>
+        </section>
+
+        {/* Admin Locked Club Storage Access Section */}
+        <section className="px-4 sm:px-6 lg:px-8">
+          <AdminStorageAccessCard onOpenAdminStorage={onOpenAdminStorage} />
         </section>
       </div>
     </div>

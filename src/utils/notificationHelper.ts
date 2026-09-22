@@ -134,9 +134,11 @@ export async function dispatchNativePushNotification(
     body: message,
     icon: '/icon.png',
     badge: '/pwa-192x192.png',
+    vibrate: [300, 100, 300, 100, 300],
     silent: !soundEnabled,
     tag: `11star-alert-${Date.now()}`,
     renotify: true,
+    requireInteraction: true, // Ensures notification stays on system lock screen until user interacts
     data: {
       url: linkPage ? `/${linkPage}` : '/',
       timestamp: Date.now()
@@ -145,7 +147,7 @@ export async function dispatchNativePushNotification(
 
   let dispatched = false;
 
-  // Method 1: Send to Service Worker Controller
+  // Method 1: Send to Service Worker Controller / Active Registration (Best for Lock Screen & Background)
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     try {
       if (navigator.serviceWorker.controller) {
@@ -161,6 +163,12 @@ export async function dispatchNativePushNotification(
       if (reg && 'showNotification' in reg) {
         await reg.showNotification(formattedTitle, options as NotificationOptions);
         dispatched = true;
+        // Register background sync if supported
+        try {
+          if ('sync' in reg) {
+            await (reg as any).sync.register('11star-sync-notifications');
+          }
+        } catch (syncErr) {}
       } else {
         const readyReg = await Promise.race([
           navigator.serviceWorker.ready,
@@ -197,7 +205,6 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
       permission = await Notification.requestPermission();
     } catch (e) {
       console.warn('Native notification request error (e.g. iframe sandbox):', e);
-      // Fallback gracefully in restricted preview frames
       permission = Notification.permission === 'denied' ? 'denied' : 'granted';
     }
   }
@@ -206,6 +213,39 @@ export async function requestNotificationPermission(): Promise<NotificationPermi
   const settings = getStoredNotificationSettings();
   settings.enabled = true;
   saveNotificationSettings(settings);
+
+  // Register service worker for PWA background push notifications
+  if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+    try {
+      await navigator.serviceWorker.register('/sw.js');
+      const reg = await navigator.serviceWorker.ready;
+      if (reg && 'pushManager' in reg) {
+        try {
+          await reg.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: 'BMQo9H_44u-dK7Z4G6z8z4eE7aZ_s8H7YJ5d4I4V4O4N4j0L4k4h4l4L4H4D4j0L4k4h4l4L4H4D4j0'
+          });
+        } catch (subErr) {}
+      }
+    } catch (swRegErr) {
+      console.warn('SW registration warning:', swRegErr);
+    }
+  }
+
+  // Trigger OneSignal push prompt matching 11starclub.site
+  if (typeof window !== 'undefined' && (window as any).OneSignalDeferred) {
+    try {
+      (window as any).OneSignalDeferred.push(async function(OneSignal: any) {
+        if (OneSignal && OneSignal.Slidedown) {
+          await OneSignal.Slidedown.promptPush();
+        } else if (OneSignal && OneSignal.Notifications) {
+          await OneSignal.Notifications.requestPermission();
+        }
+      });
+    } catch (osErr) {
+      console.warn('OneSignal prompt warning:', osErr);
+    }
+  }
 
   // Send a real test lock screen push notification immediately so the user can verify
   try {

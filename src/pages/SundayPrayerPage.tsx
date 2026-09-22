@@ -27,6 +27,7 @@ import { deleteVideoBlob, getVideoBlob } from '../utils/videoStorageHelper';
 import { isDirectVideoUrl } from '../utils/mediaEmbedHelper';
 import { db } from '../lib/firebase';
 import { doc, onSnapshot, setDoc, collection, addDoc, deleteDoc } from 'firebase/firestore';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
 
 const INITIAL_PRAYER_ITEMS: PrayerItem[] = [
   {
@@ -118,6 +119,14 @@ export const SundayPrayerPage: React.FC = () => {
 
   // Sync Custom Prayer Items with Firestore in Real-Time
   useEffect(() => {
+    // 1. Initial persistent load
+    loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((saved) => {
+      if (saved && saved.length > 0) {
+        setItems([...INITIAL_PRAYER_ITEMS, ...saved.filter((p: PrayerItem) => !INITIAL_PRAYER_ITEMS.some(i => i.id === p.id))]);
+      }
+    });
+
+    // 2. Real-time Firestore sync with merge
     const itemsColRef = collection(db, 'prayerItems');
     const unsub = onSnapshot(itemsColRef, (snap) => {
       const firestoreItems: PrayerItem[] = [];
@@ -125,11 +134,11 @@ export const SundayPrayerPage: React.FC = () => {
         firestoreItems.push({ ...(d.data() as PrayerItem), id: d.id });
       });
 
-      firestoreItems.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
-      setItems([...INITIAL_PRAYER_ITEMS, ...firestoreItems.filter(p => !INITIAL_PRAYER_ITEMS.some(i => i.id === p.id))]);
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(firestoreItems));
-      } catch (e) {}
+      loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((local) => {
+        const mergedCustom = mergeItemsWithLocal(firestoreItems, local);
+        savePersistentItems(LOCAL_STORAGE_KEY, mergedCustom);
+        setItems([...INITIAL_PRAYER_ITEMS, ...mergedCustom.filter(p => !INITIAL_PRAYER_ITEMS.some(i => i.id === p.id))]);
+      });
     }, (err) => {
       console.warn('Prayer items Firestore listener notice:', err);
     });
@@ -196,12 +205,9 @@ export const SundayPrayerPage: React.FC = () => {
     } as any;
     const updated = [...items, itemWithTime];
     setItems(updated);
-    try {
-      const customItems = updated.filter((i) => i.isCustom);
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(customItems));
-    } catch (e) {
-      console.warn(e);
-    }
+    const customItems = updated.filter((i) => i.isCustom);
+    await savePersistentItems(LOCAL_STORAGE_KEY, customItems);
+
     try {
       await setDoc(doc(db, 'prayerItems', itemWithTime.id), itemWithTime);
     } catch (e) {
@@ -230,12 +236,9 @@ export const SundayPrayerPage: React.FC = () => {
       } catch (e) {
         console.warn('Error deleting video blob:', e);
       }
-      try {
-        const customItems = updated.filter((i) => i.isCustom);
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(customItems));
-      } catch (err) {
-        console.warn(err);
-      }
+      const customItems = updated.filter((i) => i.isCustom);
+      await savePersistentItems(LOCAL_STORAGE_KEY, customItems);
+
       try {
         await deleteDoc(doc(db, 'prayerItems', itemToDeleteId));
       } catch (err) {

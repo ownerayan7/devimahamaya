@@ -382,22 +382,27 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
             )}
 
             {isInsideIframe && (
-              <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-200/90 leading-relaxed">
+              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-xs text-amber-200/90 leading-relaxed space-y-2">
                 <div className="flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                   <div>
-                    <span className="font-semibold text-amber-300">মোবাইল পুশ নোটিফিকেশন টিপ:</span>
-                    <p className="mt-0.5 text-stone-300 text-[11px]">
-                      মোবাইলের লক স্ক্রিনে ব্যাকগ্রাউন্ড অ্যালার্ট পেতে অ্যাপটি নতুন ব্রাউজার ট্যাবে ওপেন করে নোটিফিকেশন অন করুন।
+                    <span className="font-bold text-amber-300">লক স্ক্রিন নোটিফিকেশন ও বন্ধ থাকা অবস্থা (Background/Lock Screen):</span>
+                    <p className="mt-1 text-stone-300 text-[11px] leading-relaxed">
+                      ওয়েবসাইট বা অ্যাপ বন্ধ থাকলে মোবাইলের লক স্ক্রিনে সরাসরি নোটিফিকেশন পাওয়ার জন্য নিশ্চিত করুন:
                     </p>
+                    <ul className="list-disc list-inside space-y-1 text-[11px] text-stone-300 mt-1 pl-1">
+                      <li>ব্রাউজারে নোটিফিকেশন পারমিশন <strong>Allow (অনুমোদিত)</strong> করা আছে।</li>
+                      <li>অ্যাপটি ফুল ব্রাউজারে খোলা আছে অথবা মোবাইলের হোম স্ক্রিনে <strong>PWA (Add to Home Screen)</strong> হিসেবে ইনস্টল করা আছে।</li>
+                      <li>ফোনের নোটিফিকেশন সেটিংসে ব্রাউজার ও 11 স্টার ক্লাবের নোটিফিকেশন চালু রাখা হয়েছে।</li>
+                    </ul>
                     <a
                       href={typeof window !== 'undefined' ? window.location.href : '#'}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="inline-flex items-center gap-1 mt-2 text-[11px] font-bold text-amber-400 hover:text-amber-300 underline"
+                      className="inline-flex items-center gap-1 mt-2.5 text-[11px] font-bold text-amber-400 hover:text-amber-300 underline bg-black/40 px-3 py-1.5 rounded-lg border border-amber-500/30"
                     >
-                      <span>নতুন ব্রাউজার ট্যাবে ওপেন করুন</span>
-                      <ExternalLink className="w-3 h-3" />
+                      <ExternalLink className="w-3.5 h-3.5" />
+                      <span>ফুল ব্রাউজার ট্যাবে ওপেন করুন</span>
                     </a>
                   </div>
                 </div>

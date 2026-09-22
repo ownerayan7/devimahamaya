@@ -16,6 +16,7 @@ import { broadcastMediaPlaybackStarted, registerHtmlMediaElement, subscribeToMed
 import { updateLockScreenMediaMetadata, pauseLockScreenMediaSession, clearLockScreenMediaMetadata } from '../utils/mediaSessionHelper';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
 
 const LOCAL_STORAGE_KEY = '11starclub_rabindra_songs_v1';
 
@@ -60,8 +61,17 @@ export const RabindraSangeetPage: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Firestore Real-Time Listener
+  // Firestore Real-Time Listener + persistent storage merge
   useEffect(() => {
+    // 1. Initial persistent load
+    loadPersistentItems<RabindraSongItem>(LOCAL_STORAGE_KEY).then((saved) => {
+      if (saved && saved.length > 0) {
+        setSongs(saved);
+        setActiveSong(saved[0]);
+      }
+    });
+
+    // 2. Real-time Firestore sync with merge
     try {
       const unsub = onSnapshot(
         collection(db, 'rabindraSongs'),
@@ -74,17 +84,14 @@ export const RabindraSangeetPage: React.FC = () => {
               id: docSnap.id,
             });
           });
-          firestoreItems.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
-          if (firestoreItems.length > 0) {
-            setSongs(firestoreItems);
-            setActiveSong((prev) => prev ? (firestoreItems.find(s => s.id === prev.id) || firestoreItems[0]) : firestoreItems[0]);
-          } else {
-            setSongs([]);
-            setActiveSong(null);
-          }
-          try {
-            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(firestoreItems));
-          } catch {}
+
+          loadPersistentItems<RabindraSongItem>(LOCAL_STORAGE_KEY).then((local) => {
+            const merged = mergeItemsWithLocal(firestoreItems, local);
+            merged.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+            setSongs(merged);
+            setActiveSong((prev) => prev ? (merged.find(s => s.id === prev.id) || merged[0] || null) : (merged[0] || null));
+            savePersistentItems(LOCAL_STORAGE_KEY, merged);
+          });
         },
         (err) => {
           console.warn('Firestore rabindraSongs snapshot notice:', err);
@@ -135,11 +142,7 @@ export const RabindraSangeetPage: React.FC = () => {
     const updated = [newSong, ...songs];
     setSongs(updated);
     setActiveSong(newSong);
-    try {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-    } catch (e) {
-      console.warn(e);
-    }
+    await savePersistentItems(LOCAL_STORAGE_KEY, updated);
 
     // Sync to Firestore
     try {
@@ -156,11 +159,7 @@ export const RabindraSangeetPage: React.FC = () => {
       if (activeSong?.id === songToDeleteId) {
         setActiveSong(updated.length > 0 ? updated[0] : null);
       }
-      try {
-        localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(updated));
-      } catch (err) {
-        console.warn(err);
-      }
+      await savePersistentItems(LOCAL_STORAGE_KEY, updated);
 
       // Delete from Firestore
       try {

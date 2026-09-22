@@ -16,6 +16,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { Announcement } from '../types';
+import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 interface AddNoticeModalProps {
   isOpen: boolean;
@@ -100,6 +101,18 @@ export const AddNoticeModal: React.FC<AddNoticeModalProps> = ({
     };
 
     onAddNotice(newNotice);
+    
+    // Persist to Permanent Storage
+    saveClubStoredItem({
+      title: newNotice.title,
+      type: 'photo',
+      source: 'device',
+      url: newNotice.image || '',
+      authorName: 'অ্যাডমিন (নোটিশ)',
+      description: newNotice.content,
+      category: 'notice'
+    }).catch(console.warn);
+
     setSuccess('নতুন বিজ্ঞপ্তিটি সফলভাবে প্রকাশিত হয়েছে!');
 
     setTimeout(() => {

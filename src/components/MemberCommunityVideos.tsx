@@ -148,21 +148,21 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
             });
           });
           firestoreList.sort((a: any, b: any) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
-          const finalList = firestoreList.length > 0 ? firestoreList : INITIAL_MEMBER_VIDEOS;
-          setMemberVideos(finalList);
+          if (firestoreList.length > 0) {
+            setMemberVideos(firestoreList);
+            if (!hasUserSelectedRef.current && firestoreList.length > 0) {
+              handlePlayMemberVideo(firestoreList[0], false);
+            }
 
-          if (!hasUserSelectedRef.current && finalList.length > 0) {
-            handlePlayMemberVideo(finalList[0], false);
+            const counts: Record<string, number> = {};
+            firestoreList.forEach((v) => {
+              counts[v.id] = v.likes || 1;
+            });
+            setLikeCounts((prev) => ({ ...prev, ...counts }));
+            try {
+              localStorage.setItem(STORAGE_KEY, JSON.stringify(firestoreList));
+            } catch {}
           }
-
-          const counts: Record<string, number> = {};
-          finalList.forEach((v) => {
-            counts[v.id] = v.likes || 1;
-          });
-          setLikeCounts((prev) => ({ ...prev, ...counts }));
-          try {
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(finalList));
-          } catch {}
         },
         (err) => {
           console.warn('Firestore memberVideos snapshot notice:', err);

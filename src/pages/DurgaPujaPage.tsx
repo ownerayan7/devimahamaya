@@ -16,8 +16,13 @@ import {
 } from 'lucide-react';
 import { PUJA_SCHEDULE_2026, CLUB_INFO, ANNOUNCEMENTS } from '../data/clubData';
 import { ImageLightbox } from '../components/ImageLightbox';
+import { AdminStorageAccessCard } from '../components/AdminStorageAccessCard';
 
-export const DurgaPujaPage: React.FC = () => {
+interface DurgaPujaPageProps {
+  onOpenAdminStorage?: () => void;
+}
+
+export const DurgaPujaPage: React.FC<DurgaPujaPageProps> = ({ onOpenAdminStorage }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
 
   return (
@@ -219,6 +224,11 @@ export const DurgaPujaPage: React.FC = () => {
         title="শারদীয়া দুর্গাপূজা ২০২৬ — খুঁটি পূজার অফিসিয়াল বিজ্ঞপ্তি"
         subtitle="11 স্টার ক্লাব"
       />
+
+      {/* Admin Locked Club Storage Access */}
+      <div className="pt-8">
+        <AdminStorageAccessCard onOpenAdminStorage={onOpenAdminStorage} />
+      </div>
     </div>
   );
 };

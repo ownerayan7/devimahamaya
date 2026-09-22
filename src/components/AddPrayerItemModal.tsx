@@ -22,6 +22,7 @@ import { extractYouTubeId, getYouTubeThumbnail } from '../utils/youtubeHelper';
 import { extractDriveFileId, getDriveDirectImageUrl } from '../utils/driveHelper';
 import { sendAppNotification } from '../utils/notificationHelper';
 import { saveVideoBlob, generateVideoThumbnail } from '../utils/videoStorageHelper';
+import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 interface AddPrayerItemModalProps {
   isOpen: boolean;
@@ -174,6 +175,18 @@ export const AddPrayerItemModal: React.FC<AddPrayerItemModalProps> = ({
     };
 
     onAddPrayerItem(newItem);
+
+    // Persist to Permanent Storage
+    saveClubStoredItem({
+      title: newItem.title,
+      type: newItem.type === 'video' ? 'video' : 'audio',
+      source: newItem.mediaSource === 'local' ? 'device' : 'online',
+      url: newItem.mediaUrl,
+      thumbnailUrl: newItem.thumbnailUrl,
+      authorName: newItem.authorName,
+      description: newItem.description,
+      category: 'prayer'
+    }).catch(console.warn);
 
     // Send App notification to all subscribers
     sendAppNotification(

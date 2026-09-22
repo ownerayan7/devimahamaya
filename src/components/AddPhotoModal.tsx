@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { getDriveDirectImageUrl, extractDriveFileId } from '../utils/driveHelper';
 import { optimizeImage } from '../utils/imageOptimizer';
+import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 interface AddPhotoModalProps {
   isOpen: boolean;
@@ -132,7 +133,21 @@ export const AddPhotoModal: React.FC<AddPhotoModalProps> = ({
       });
 
       onAddPhotos(newItems);
-      setSuccessMsg(`${newItems.length}টি নতুন ছবি সফলভাবে পেজের গ্যালারিতে যুক্ত করা হয়েছে!`);
+      
+      // Persist to Permanent Storage
+      newItems.forEach(item => {
+        saveClubStoredItem({
+          title: item.title,
+          type: 'photo',
+          source: 'online',
+          url: item.url,
+          authorName: 'অ্যাডমিন (ড্রাইভ)',
+          description: item.subtitle,
+          category: item.category
+        }).catch(console.warn);
+      });
+
+      setSuccessMsg(`${newItems.length}টি নতুন ছবি সফলভাবে পেজের গ্যালারিতে ও স্থায়ী স্টোরেজে যুক্ত করা হয়েছে!`);
       setTimeout(() => {
         onClose();
         resetForm();
@@ -162,7 +177,21 @@ export const AddPhotoModal: React.FC<AddPhotoModalProps> = ({
       });
 
       onAddPhotos(newItems);
-      setSuccessMsg(`${newItems.length}টি ছবি সফলভাবে পেজে যুক্ত করা হয়েছে!`);
+
+      // Persist to Permanent Storage
+      newItems.forEach(item => {
+        saveClubStoredItem({
+          title: item.title,
+          type: 'photo',
+          source: 'device',
+          url: item.url,
+          authorName: 'অ্যাডমিন (আপলোড)',
+          description: item.subtitle,
+          category: item.category
+        }).catch(console.warn);
+      });
+
+      setSuccessMsg(`${newItems.length}টি ছবি সফলভাবে পেজে ও স্থায়ী স্টোরেজে যুক্ত করা হয়েছে!`);
       setTimeout(() => {
         onClose();
         resetForm();
