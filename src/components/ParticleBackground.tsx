@@ -21,8 +21,11 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({ reducedM
 
     const handleResize = () => {
       if (!canvas) return;
-      width = canvas.width = window.innerWidth;
-      height = canvas.height = window.innerHeight;
+      // Only re-size canvas if width changes or height changes significantly (to prevent mobile URL bar toggle flicker)
+      if (Math.abs(window.innerWidth - width) > 10 || Math.abs(window.innerHeight - height) > 90) {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+      }
     };
 
     window.addEventListener('resize', handleResize);

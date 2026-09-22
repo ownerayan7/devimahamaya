@@ -138,19 +138,52 @@ export async function dispatchNativePushNotification(
     silent: !soundEnabled,
     tag: `11star-alert-${Date.now()}`,
     renotify: true,
-    requireInteraction: true, // Ensures notification stays on system lock screen until user interacts
+    requireInteraction: true, // Guarantees lock screen display on Android/iOS/Desktop
     data: {
       url: linkPage ? `/${linkPage}` : '/',
       timestamp: Date.now()
-    }
+    },
+    actions: [
+      { action: 'open', title: '📱 ওপেন করুন' }
+    ]
   };
+
+  // Check and request notification permission if default
+  if (typeof window !== 'undefined' && 'Notification' in window) {
+    if (Notification.permission === 'default') {
+      try {
+        await Notification.requestPermission();
+      } catch (e) {
+        console.warn('Permission request notice:', e);
+      }
+    }
+
+    if (Notification.permission === 'denied') {
+      console.warn('Lock screen push notification permission is denied in browser settings.');
+    }
+  }
 
   let dispatched = false;
 
-  // Method 1: Send to Service Worker Controller / Active Registration (Best for Lock Screen & Background)
+  // Primary Method for Mobile & Lock Screen: Service Worker showNotification
   if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
     try {
-      if (navigator.serviceWorker.controller) {
+      let reg = await navigator.serviceWorker.getRegistration();
+      if (!reg) {
+        reg = await navigator.serviceWorker.register('/sw.js').catch(() => undefined);
+      }
+
+      if (!reg) {
+        reg = await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 1200))
+        ]);
+      }
+
+      if (reg && 'showNotification' in reg) {
+        await reg.showNotification(formattedTitle, options as NotificationOptions);
+        dispatched = true;
+      } else if (navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({
           type: 'SHOW_LOCKSCREEN_NOTIFICATION',
           title: formattedTitle,
@@ -158,39 +191,18 @@ export async function dispatchNativePushNotification(
         });
         dispatched = true;
       }
-
-      const reg = await navigator.serviceWorker.getRegistration();
-      if (reg && 'showNotification' in reg) {
-        await reg.showNotification(formattedTitle, options as NotificationOptions);
-        dispatched = true;
-        // Register background sync if supported
-        try {
-          if ('sync' in reg) {
-            await (reg as any).sync.register('11star-sync-notifications');
-          }
-        } catch (syncErr) {}
-      } else {
-        const readyReg = await Promise.race([
-          navigator.serviceWorker.ready,
-          new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 1000))
-        ]);
-        if (readyReg && 'showNotification' in readyReg) {
-          await readyReg.showNotification(formattedTitle, options as NotificationOptions);
-          dispatched = true;
-        }
-      }
     } catch (swErr) {
-      console.warn('Service worker showNotification error:', swErr);
+      console.warn('Service worker showNotification notice:', swErr);
     }
   }
 
-  // Method 2: Standard window Notification constructor (Desktop & Standalone browser)
+  // Fallback for desktop window Notification constructor
   if (!dispatched && typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
     try {
       new Notification(formattedTitle, options as NotificationOptions);
       dispatched = true;
     } catch (e) {
-      console.warn('Window Notification constructor fallback error:', e);
+      console.warn('Window Notification constructor fallback notice:', e);
     }
   }
 

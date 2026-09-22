@@ -67,6 +67,17 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  useEffect(() => {
+    if (mobileMenuOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileMenuOpen]);
+
   const handleNavClick = (page: PageId) => {
     if (page === 'settings') {
       if (onOpenNotificationModal) {
@@ -79,7 +90,6 @@ export const Navbar: React.FC<NavbarProps> = ({
     onNavigate(page);
     setMobileMenuOpen(false);
     setServiceDropdownOpen(false);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const navItems: Array<{
