@@ -17,10 +17,37 @@ export interface ClubStoredItem {
 }
 
 const STORAGE_KEY = 'eleven_star_club_permanent_storage_v2';
+const DELETED_STORAGE_IDS_KEY = 'eleven_star_club_deleted_storage_ids_v1';
+
+export const getDeletedStorageIds = (): string[] => {
+  try {
+    const raw = localStorage.getItem(DELETED_STORAGE_IDS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+export const addDeletedStorageId = (id: string): void => {
+  try {
+    const existing = getDeletedStorageIds();
+    if (!existing.includes(id)) {
+      const updated = [...existing, id];
+      localStorage.setItem(DELETED_STORAGE_IDS_KEY, JSON.stringify(updated));
+    }
+  } catch (e) {
+    console.warn('Error saving deleted ID:', e);
+  }
+};
 
 export const getStoredClubItems = async (): Promise<ClubStoredItem[]> => {
+  const deletedIds = getDeletedStorageIds();
   const items = await loadPersistentItems<ClubStoredItem>(STORAGE_KEY);
-  if (items.length === 0) {
+  
+  // Filter out any previously deleted items
+  const filtered = items.filter(item => !deletedIds.includes(item.id) && item.id !== 'store-2');
+
+  if (filtered.length === 0 && items.length === 0 && !deletedIds.includes('store-1')) {
     const defaultItems: ClubStoredItem[] = [
       {
         id: 'store-1',
@@ -33,24 +60,17 @@ export const getStoredClubItems = async (): Promise<ClubStoredItem[]> => {
         category: 'puja',
         createdAt: Date.now() - 86400000,
         dateAdded: '27 আগস্ট ২০২৬'
-      },
-      {
-        id: 'store-2',
-        title: 'মহালয়া বিশেষ চণ্ডীপাঠ ও গান',
-        type: 'audio',
-        source: 'online',
-        url: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
-        authorName: 'বীরেন্দ্রকৃষ্ণ ভদ্র',
-        description: 'মহিষাসুরমর্দিনী অডিও সম্প্রচার।',
-        category: 'mahalaya',
-        createdAt: Date.now() - 43200000,
-        dateAdded: '27 আগস্ট ২০২৬'
       }
     ];
     await savePersistentItems(STORAGE_KEY, defaultItems);
     return defaultItems;
   }
-  return items;
+  
+  if (filtered.length !== items.length) {
+    await savePersistentItems(STORAGE_KEY, filtered);
+  }
+  
+  return filtered;
 };
 
 export const saveClubStoredItem = async (item: Omit<ClubStoredItem, 'id' | 'createdAt' | 'dateAdded'>): Promise<ClubStoredItem> => {
@@ -84,6 +104,7 @@ export const saveClubStoredItem = async (item: Omit<ClubStoredItem, 'id' | 'crea
 };
 
 export const fetchCloudClubItems = async (): Promise<ClubStoredItem[]> => {
+  const deletedIds = getDeletedStorageIds();
   const localItems = await getStoredClubItems();
   try {
     if (!db) return localItems;
@@ -91,16 +112,20 @@ export const fetchCloudClubItems = async (): Promise<ClubStoredItem[]> => {
     const snapshot = await getDocs(q);
     const cloudItems: ClubStoredItem[] = [];
     snapshot.forEach((docSnap) => {
-      cloudItems.push(docSnap.data() as ClubStoredItem);
+      const d = docSnap.data() as ClubStoredItem;
+      if (d && !deletedIds.includes(d.id) && d.id !== 'store-2') {
+        cloudItems.push(d);
+      }
     });
 
-    const merged = mergeItemsWithLocal(cloudItems, localItems);
+    const filteredLocal = localItems.filter(i => !deletedIds.includes(i.id) && i.id !== 'store-2');
+    const merged = mergeItemsWithLocal(cloudItems, filteredLocal);
     await savePersistentItems(STORAGE_KEY, merged);
     return merged;
   } catch (e) {
     console.warn('Could not fetch from cloud, using local storage:', e);
   }
-  return localItems;
+  return localItems.filter(i => !deletedIds.includes(i.id) && i.id !== 'store-2');
 };
 
 export const subscribeCloudClubItems = (onItemsUpdated: (items: ClubStoredItem[]) => void): (() => void) => {
@@ -111,13 +136,18 @@ export const subscribeCloudClubItems = (onItemsUpdated: (items: ClubStoredItem[]
 
   const q = query(collection(db, 'clubDataStorage'), orderBy('createdAt', 'desc'));
   const unsubscribe = onSnapshot(q, async (snapshot) => {
+    const deletedIds = getDeletedStorageIds();
     const cloudItems: ClubStoredItem[] = [];
     snapshot.forEach((docSnap) => {
-      cloudItems.push(docSnap.data() as ClubStoredItem);
+      const d = docSnap.data() as ClubStoredItem;
+      if (d && !deletedIds.includes(d.id) && d.id !== 'store-2') {
+        cloudItems.push(d);
+      }
     });
 
     const localItems = await getStoredClubItems();
-    const merged = mergeItemsWithLocal(cloudItems, localItems);
+    const filteredLocal = localItems.filter(i => !deletedIds.includes(i.id) && i.id !== 'store-2');
+    const merged = mergeItemsWithLocal(cloudItems, filteredLocal);
     await savePersistentItems(STORAGE_KEY, merged);
     onItemsUpdated(merged);
   }, (err) => {
@@ -129,11 +159,19 @@ export const subscribeCloudClubItems = (onItemsUpdated: (items: ClubStoredItem[]
 };
 
 export const deleteClubStoredItem = async (id: string): Promise<void> => {
+  // 1. Mark ID permanently as deleted so it can never be resurrected by sync
+  addDeletedStorageId(id);
+  if (id === 'store-2') {
+    addDeletedStorageId('মহালয়া বিশেষ চণ্ডীপাঠ ও গান');
+  }
+
+  // 2. Remove from local persistent storage
   const existing = await getStoredClubItems();
-  const updated = existing.filter(item => item.id !== id);
+  const updated = existing.filter(item => item.id !== id && (id !== 'store-2' || item.title !== 'মহালয়া বিশেষ চণ্ডীপাঠ ও গান'));
   await savePersistentItems(STORAGE_KEY, updated);
   window.dispatchEvent(new Event('club_storage_updated'));
 
+  // 3. Remove from Firestore
   try {
     if (db) {
       await deleteDoc(doc(db, 'clubDataStorage', id));

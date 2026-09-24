@@ -14,6 +14,7 @@ import { GlobalMediaPlayer } from './components/GlobalMediaPlayer';
 // Pages
 import { HomePage } from './pages/HomePage';
 import { DurgaPujaPage } from './pages/DurgaPujaPage';
+import { DeviAiPage } from './pages/DeviAiPage';
 import { SocialServicesPage } from './pages/SocialServicesPage';
 import { MedicalAssistancePage } from './pages/MedicalAssistancePage';
 import { HelpForNeedyPage } from './pages/HelpForNeedyPage';
@@ -145,6 +146,8 @@ export function App() {
         );
       case 'durga-puja':
         return <DurgaPujaPage onOpenAdminStorage={() => setIsAdminStorageOpen(true)} />;
+      case 'devi-ai':
+        return <DeviAiPage onNavigate={handleNavigate} />;
       case 'prayer':
         return <SundayPrayerPage />;
       case 'rabindra-sangeet':
@@ -219,7 +222,7 @@ export function App() {
           onReplayWelcome={handleReplayWelcome}
         />
 
-        <main className="flex-1 pt-20 sm:pt-24 md:pt-28">
+        <main className="flex-1 pt-28 sm:pt-32 md:pt-36">
           {/* Bhagavad Gita Persistent Container (Stays in DOM so audio is never interrupted) */}
           <div className={currentPage === 'gita' ? 'block' : 'opacity-0 pointer-events-none fixed -top-[99999px] left-0 w-0 h-0 overflow-hidden'}>
             <BhagavadGitaPage />

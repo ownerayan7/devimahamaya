@@ -17,9 +17,11 @@ import { CLUB_INFO, TREE_PLANTATION_PHOTOS } from '../data/clubData';
 import { TreePlantationPhotoItem } from '../types';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { AddPhotoModal } from '../components/AddPhotoModal';
+import { AdminPhotoAuthModal } from '../components/AdminPhotoAuthModal';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
+import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 const LOCAL_STORAGE_KEY = '11star_tree_plantation_custom_photos';
 
@@ -88,12 +90,27 @@ export const TreePlantationPage: React.FC = () => {
     const updated = [...formatted, ...current];
     await saveCustomPhotos(updated);
 
-    // Save to Firestore
+    // Save to Firestore & Central Club Data Storage
     for (const item of formatted) {
       try {
         await setDoc(doc(db, 'treePlantationPhotos', String(item.id)), item);
       } catch (err) {
         console.warn('Failed to save tree plantation photo to Firestore:', err);
+      }
+
+      // Also save to Permanent Club Data Storage & File Manager
+      try {
+        await saveClubStoredItem({
+          title: item.title || 'বৃক্ষরোপণ কর্মসূচি ছবি',
+          type: 'photo',
+          source: item.url.startsWith('data:') ? 'device' : 'online',
+          url: item.url,
+          authorName: 'ক্লাব বৃক্ষরোপণ কর্মসূচি',
+          description: item.subtitle || '11 স্টার ক্লাব বৃক্ষরোপণ অভিযান ও চারাগাছ বিতরণ কর্মসূচির সংরক্ষিত ছবি।',
+          category: 'tree-plantation'
+        });
+      } catch (err) {
+        console.warn('Failed to save tree photo to Club Storage:', err);
       }
     }
   };

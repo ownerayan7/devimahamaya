@@ -1,6 +1,7 @@
 export type PageId =
   | 'home'
   | 'durga-puja'
+  | 'devi-ai'
   | 'social-services'
   | 'medical'
   | 'needy'
@@ -169,6 +170,7 @@ export interface GalleryPhotoItem {
   url: string;
   tag: string;
   isCustom?: boolean;
+  createdAt?: number;
 }
 
 export interface TreePlantationPhotoItem {

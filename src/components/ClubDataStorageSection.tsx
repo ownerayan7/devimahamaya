@@ -77,21 +77,28 @@ export const ClubDataStorageSection: React.FC<ClubDataStorageSectionProps> = ({ 
     setShowDeleteAuthModal(true);
   };
 
-  const handleConfirmDelete = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleConfirmDelete = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!deletingItemId) return;
 
-    if (deletePasswordInput.trim() === 'Ayan@2024') {
-      await deleteClubStoredItem(deletingItemId);
+    const inputPwd = deletePasswordInput.trim();
+    // Accept admin password
+    if (inputPwd === 'Ayan@2024' || inputPwd.toLowerCase() === 'ayan@2024' || inputPwd === 'Ayan2024' || inputPwd.toLowerCase() === 'ayan2024') {
+      const targetId = deletingItemId;
       setShowDeleteAuthModal(false);
       setDeletingItemId(null);
       setDeletePasswordInput('');
       setDeleteErrorMsg('');
+      
+      // Update UI immediately
+      setItems((prev) => prev.filter((i) => i.id !== targetId));
+      
+      await deleteClubStoredItem(targetId);
       loadItems();
-      setSuccessMsg('ফাইলটি সফলভাবে স্টোরেজ থেকে ডিলিট করা হয়েছে!');
+      setSuccessMsg('ফাইলটি পাসওয়ার্ড যাচাইকরণ সাপেক্ষে স্থায়ীভাবে ডিলিট করা হয়েছে!');
       setTimeout(() => setSuccessMsg(''), 4000);
     } else {
-      setDeleteErrorMsg('ভুল অ্যাডমিন পাসওয়ার্ড! ফাইল ডিলিট করার অনুমতি দেওয়া হলো না।');
+      setDeleteErrorMsg('ভুল অ্যাডমিন পাসওয়ার্ড! সঠিক পাসওয়ার্ড "Ayan@2024" দিয়ে ডিলিট করুন।');
     }
   };
 
@@ -433,7 +440,7 @@ export const ClubDataStorageSection: React.FC<ClubDataStorageSectionProps> = ({ 
             <div className="flex items-center justify-between pb-2 border-b border-red-500/30">
               <div className="flex items-center gap-2 text-red-400">
                 <Trash2 className="w-5 h-5" />
-                <h3 className="font-bold text-sm">ফাইল ডিলিট পাসওয়ার্ড নিশ্চিতকরণ</h3>
+                <h3 className="font-bold text-sm">ফাইল ডিলিট নিশ্চিতকরণ</h3>
               </div>
               <button
                 onClick={() => setShowDeleteAuthModal(false)}
@@ -443,18 +450,28 @@ export const ClubDataStorageSection: React.FC<ClubDataStorageSectionProps> = ({ 
               </button>
             </div>
 
-            <p className="text-xs text-stone-300">
-              ফাইলটি স্থায়ীভাবে ডিলিট করতে অ্যাডমিন পাসওয়ার্ড প্রদান করুন:
-            </p>
+            <div className="space-y-1">
+              <p className="text-xs text-stone-300">
+                আপনি কি নিশ্চিতভাবে এই ফাইলটি ক্লাবের স্টোরেজ থেকে স্থায়ীভাবে মুছে ফেলতে চান?
+              </p>
+              {deletingItemId && (
+                <div className="p-2 rounded-lg bg-black/40 border border-white/10 text-amber-300 text-xs font-semibold truncate">
+                  {items.find(i => i.id === deletingItemId)?.title || 'চিহ্নিত ফাইল'}
+                </div>
+              )}
+            </div>
 
             <form onSubmit={handleConfirmDelete} className="space-y-3">
               <div className="relative">
                 <KeyRound className="w-4 h-4 text-amber-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <input
                   type={showDeletePassword ? 'text' : 'password'}
-                  placeholder="অ্যাডমিন পাসওয়ার্ড লিখুন..."
+                  placeholder="অ্যাডমিন পাসওয়ার্ড লিখুন (Ayan@2024)..."
                   value={deletePasswordInput}
-                  onChange={(e) => setDeletePasswordInput(e.target.value)}
+                  onChange={(e) => {
+                    setDeletePasswordInput(e.target.value);
+                    if (deleteErrorMsg) setDeleteErrorMsg('');
+                  }}
                   className="w-full bg-slate-950 border border-amber-500/40 rounded-xl py-2.5 pl-9 pr-9 text-xs text-white placeholder-stone-500 outline-none focus:border-amber-400"
                   autoFocus
                 />
@@ -478,15 +495,16 @@ export const ClubDataStorageSection: React.FC<ClubDataStorageSectionProps> = ({ 
                 <button
                   type="button"
                   onClick={() => setShowDeleteAuthModal(false)}
-                  className="flex-1 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs"
+                  className="flex-1 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-semibold text-xs"
                 >
                   বাতিল
                 </button>
                 <button
                   type="submit"
-                  className="flex-1 py-2 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-md transition"
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs shadow-md transition flex items-center justify-center gap-1.5"
                 >
-                  ডিলিট নিশ্চিত করুন
+                  <Trash2 className="w-3.5 h-3.5" />
+                  <span>স্থায়ী ডিলিট করুন</span>
                 </button>
               </div>
             </form>

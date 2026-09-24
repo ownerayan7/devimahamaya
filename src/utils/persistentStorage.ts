@@ -59,7 +59,7 @@ export async function idbSet<T>(key: string, value: T): Promise<void> {
 /**
  * Saves items reliably to both IndexedDB and LocalStorage.
  */
-export async function savePersistentItems<T extends { id: string }>(key: string, items: T[]): Promise<void> {
+export async function savePersistentItems<T extends { id: string | number }>(key: string, items: T[]): Promise<void> {
   // 1. Save to IndexedDB (unlimited quota)
   await idbSet(key, items);
 
@@ -74,7 +74,7 @@ export async function savePersistentItems<T extends { id: string }>(key: string,
 /**
  * Loads items reliably from LocalStorage and IndexedDB, returning merged non-duplicate list.
  */
-export async function loadPersistentItems<T extends { id: string }>(key: string): Promise<T[]> {
+export async function loadPersistentItems<T extends { id: string | number }>(key: string): Promise<T[]> {
   let localItems: T[] = [];
   try {
     const saved = localStorage.getItem(key);
@@ -91,12 +91,12 @@ export async function loadPersistentItems<T extends { id: string }>(key: string)
   const idbItems = (await idbGet<T[]>(key)) || [];
 
   // Merge items by ID preserving uniqueness
-  const map = new Map<string, T>();
+  const map = new Map<string | number, T>();
   for (const item of idbItems) {
-    if (item && item.id) map.set(item.id, item);
+    if (item && item.id !== undefined && item.id !== null) map.set(item.id, item);
   }
   for (const item of localItems) {
-    if (item && item.id && !map.has(item.id)) map.set(item.id, item);
+    if (item && item.id !== undefined && item.id !== null && !map.has(item.id)) map.set(item.id, item);
   }
 
   const merged = Array.from(map.values());
@@ -115,18 +115,18 @@ export async function loadPersistentItems<T extends { id: string }>(key: string)
 /**
  * Utility to merge items from Firestore snapshot with local items, ensuring newly added local items are never overwritten.
  */
-export function mergeItemsWithLocal<T extends { id: string; createdAt?: number }>(
+export function mergeItemsWithLocal<T extends { id: string | number; createdAt?: number }>(
   firestoreItems: T[],
   localItems: T[]
 ): T[] {
-  const map = new Map<string, T>();
+  const map = new Map<string | number, T>();
   // First add local items
   for (const item of localItems) {
-    if (item && item.id) map.set(item.id, item);
+    if (item && item.id !== undefined && item.id !== null) map.set(item.id, item);
   }
   // Then add/overwrite with Firestore items
   for (const item of firestoreItems) {
-    if (item && item.id) map.set(item.id, item);
+    if (item && item.id !== undefined && item.id !== null) map.set(item.id, item);
   }
 
   const merged = Array.from(map.values());

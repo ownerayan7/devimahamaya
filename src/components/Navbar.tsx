@@ -101,6 +101,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   }> = [
     { id: 'home', label: 'Home' },
     { id: 'durga-puja', label: 'দুর্গাপূজা ২০২৬', isHighlight: true },
+    { id: 'devi-ai', label: 'Devi AI', isNew: true, icon: <Sparkles className="w-3.5 h-3.5 text-cyan-400 animate-pulse" /> },
     { id: 'prayer', label: 'প্রার্থনা', isNew: true, icon: <Flame className="w-3.5 h-3.5 text-amber-300" /> },
     { id: 'rabindra-sangeet', label: 'রবীন্দ্র সঙ্গীত', isNew: true, icon: <Music className="w-3.5 h-3.5 text-amber-400" /> },
     { id: 'mahalaya', label: 'মহালয়া', icon: <Moon className="w-3.5 h-3.5 text-amber-300" /> },
@@ -290,8 +291,6 @@ export const Navbar: React.FC<NavbarProps> = ({
               </button>
             )}
 
-
-
             {/* Replay Welcome Animation Button */}
             {onReplayWelcome && (
               <button
@@ -436,8 +435,6 @@ export const Navbar: React.FC<NavbarProps> = ({
                     <span>🔒 ক্লাব অ্যাডমিন ইনবক্স</span>
                   </button>
                 )}
-
-
 
                 {onReplayWelcome && (
                   <button

@@ -17,6 +17,7 @@ export const app = initializeApp({
 
 // Configure Firestore with persistent offline caching and auto long-polling for seamless iframe & web connectivity
 let dbInstance: Firestore;
+const firestoreDbId = (firebaseConfig as any).firestoreDatabaseId;
 try {
   dbInstance = initializeFirestore(
     app,
@@ -26,11 +27,11 @@ try {
         tabManager: persistentMultipleTabManager()
       })
     },
-    firebaseConfig.firestoreDatabaseId
+    firestoreDbId
   );
 } catch {
   // Fallback if already initialized in development re-renders
-  dbInstance = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+  dbInstance = getFirestore(app, firestoreDbId);
 }
 
 export const db = dbInstance;
