@@ -265,13 +265,18 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onOpenAdminInbox }) =>
 
                 <div className="pt-2 flex flex-col sm:flex-row gap-2 justify-center">
                   <a
-                    href={`https://wa.me/919474751433?text=${encodeURIComponent(`নমস্কার 11 স্টার ক্লাব, আমি ওয়েবসাইটে এই বার্তাটি পাঠিয়েছি:\nনাম: ${formData.name}\nবিষয়: ${formData.subject || 'সাধারণ বার্তা'}\nবার্তা: ${formData.message}`)}`}
+                    href="https://whatsapp.com/channel/0029Va8LsgcB4hdNxmQWye03"
                     target="_blank"
-                    rel="noreferrer"
-                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg"
+                    rel="noopener noreferrer"
+                    onClick={() => {
+                      if (navigator.clipboard) {
+                        navigator.clipboard.writeText(`নমস্কার 11 স্টার ক্লাব,\nবার্তা আইডি: ${lastSavedId}\nনাম: ${formData.name}\nবিষয়: ${formData.subject || 'সাধারণ বার্তা'}\nবার্তা: ${formData.message}`);
+                      }
+                    }}
+                    className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all"
                   >
                     <MessageSquare className="w-4 h-4" />
-                    <span>হোয়াটসঅ্যাপেও এই বার্তাটি পাঠান</span>
+                    <span>হোয়াটসঅ্যাপ চ্যানেলেও এই বার্তাটি পাঠান</span>
                   </a>
 
                   {onOpenAdminInbox && (
