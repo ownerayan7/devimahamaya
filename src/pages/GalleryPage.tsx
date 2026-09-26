@@ -21,7 +21,8 @@ import { AdminStorageAccessCard } from '../components/AdminStorageAccessCard';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, deleteDoc, doc } from 'firebase/firestore';
 import { sendAppNotification } from '../utils/notificationHelper';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
+import { socket } from '../lib/socket';
 
 const LOCAL_STORAGE_KEY = '11star_gallery_custom_photos';
 
@@ -65,9 +66,45 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ onOpenAdminStorage }) 
       });
     }, (err) => {
       console.warn('Firestore clubPhotos sync notice:', err);
+      if (typeof (window as any).showFirestoreError === 'function') {
+        (window as any).showFirestoreError(`clubPhotos read failed: ${err.message || err}`);
+      }
     });
 
-    return () => unsubscribe();
+    // 3. Robust Hybrid Sync: Fetch from PostgreSQL fallback server to guarantee real-time updates across devices
+    fetchFromFallbackServer<GalleryPhotoItem>('gallery_photo').then((sqlPhotos) => {
+      if (sqlPhotos && sqlPhotos.length > 0) {
+        loadPersistentItems<GalleryPhotoItem>(LOCAL_STORAGE_KEY).then((local) => {
+          const merged = mergeItemsWithLocal(sqlPhotos, local);
+          setCustomPhotos(merged);
+          savePersistentItems(LOCAL_STORAGE_KEY, merged);
+        });
+      }
+    }).catch(err => console.warn('Gallery SQL fallback load notice:', err));
+
+    // 4. WebSocket (Socket.IO) Real-time sync (Facebook/YouTube style)
+    const handleRemoteItem = (data: any) => {
+      if (data && data.category === 'gallery_photo' && data.item) {
+        console.log('[WebSocket] Real-time photo received:', data.item);
+        setCustomPhotos((prev) => {
+          if (prev.some((p) => p.id === data.item.id)) return prev;
+          const updated = [data.item, ...prev];
+          savePersistentItems(LOCAL_STORAGE_KEY, updated);
+          return updated;
+        });
+      }
+    };
+
+    if (socket) {
+      socket.on('item_uploaded', handleRemoteItem);
+    }
+
+    return () => {
+      unsubscribe();
+      if (socket) {
+        socket.off('item_uploaded', handleRemoteItem);
+      }
+    };
   }, []);
 
   const handleAddPhotos = async (newItems: any[]) => {
@@ -81,12 +118,23 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ onOpenAdminStorage }) 
     setCustomPhotos(updated);
     await savePersistentItems(LOCAL_STORAGE_KEY, updated);
 
-    // Save each new photo to Firestore with exact matching doc ID
+    // Save each new photo to both Firestore and PostgreSQL Fallback Server
     for (const item of formatted) {
+      // Firebase upload
       try {
         await setDoc(doc(db, 'clubPhotos', String(item.id)), item);
-      } catch (err) {
+      } catch (err: any) {
         console.warn('Failed to save club photo to Firestore:', err);
+        if (typeof (window as any).showFirestoreError === 'function') {
+          (window as any).showFirestoreError(`clubPhotos save failed: ${err.message || err}`);
+        }
+      }
+
+      // PostgreSQL backup upload for 100% resilient cross-device syncing
+      try {
+        await uploadToFallbackServer('gallery_photo', item.title, item.subtitle || '', item);
+      } catch (sqlErr) {
+        console.warn('SQL fallback upload notice for photo:', sqlErr);
       }
     }
     

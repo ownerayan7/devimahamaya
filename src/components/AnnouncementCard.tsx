@@ -22,7 +22,8 @@ import { AdminPhotoAuthModal } from './AdminPhotoAuthModal';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { sendAppNotification } from '../utils/notificationHelper';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
+import { socket } from '../lib/socket';
 
 const LOCAL_STORAGE_NOTICES_KEY = '11star_custom_announcements_v2';
 
@@ -70,9 +71,51 @@ export const AnnouncementCard: React.FC = () => {
       });
     }, (err) => {
       console.warn('Firestore announcements listener notice:', err);
+      if (typeof (window as any).showFirestoreError === 'function') {
+        (window as any).showFirestoreError(`announcements read failed: ${err.message || err}`);
+      }
     });
 
-    return () => unsub();
+    // PostgreSQL Hybrid Sync Fallback
+    fetchFromFallbackServer<Announcement>('announcement').then((sqlNotices) => {
+      if (sqlNotices && sqlNotices.length > 0) {
+        loadPersistentItems<Announcement>(LOCAL_STORAGE_NOTICES_KEY).then((local) => {
+          const merged = mergeItemsWithLocal(sqlNotices, local);
+          merged.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+          setCustomNotices(merged);
+          if (merged.length > 0) {
+            setActiveNoticeId((prev) => merged.some(n => n.id === prev) ? prev : merged[0].id);
+          }
+          savePersistentItems(LOCAL_STORAGE_NOTICES_KEY, merged);
+        });
+      }
+    }).catch(err => console.warn('Announcements SQL fallback load notice:', err));
+
+    // WebSocket (Socket.IO) Real-time sync (Facebook/YouTube style)
+    const handleRemoteItem = (data: any) => {
+      if (data && data.category === 'announcement' && data.item) {
+        console.log('[WebSocket] Real-time announcement received:', data.item);
+        loadPersistentItems<Announcement>(LOCAL_STORAGE_NOTICES_KEY).then((local) => {
+          if (local.some((n) => n.id === data.item.id)) return;
+          const merged = [data.item, ...local];
+          merged.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+          setCustomNotices(merged);
+          setActiveNoticeId(data.item.id);
+          savePersistentItems(LOCAL_STORAGE_NOTICES_KEY, merged);
+        });
+      }
+    };
+
+    if (socket) {
+      socket.on('item_uploaded', handleRemoteItem);
+    }
+
+    return () => {
+      unsub();
+      if (socket) {
+        socket.off('item_uploaded', handleRemoteItem);
+      }
+    };
   }, []);
 
   const saveCustomNotices = async (notices: Announcement[]) => {
@@ -96,17 +139,29 @@ export const AnnouncementCard: React.FC = () => {
 
     try {
       await setDoc(doc(db, 'announcements', newNotice.id), itemWithTime);
-      
-      // Send notification
+    } catch (err: any) {
+      console.warn('Failed to save announcement to Firestore:', err);
+      if (typeof (window as any).showFirestoreError === 'function') {
+        (window as any).showFirestoreError(`announcements save failed: ${err.message || err}`);
+      }
+    }
+
+    // PostgreSQL backup upload for 100% resilient cross-device syncing
+    try {
+      await uploadToFallbackServer('announcement', itemWithTime.title, itemWithTime.content || '', itemWithTime);
+    } catch (sqlErr) {
+      console.warn('SQL fallback upload notice for announcement:', sqlErr);
+    }
+
+    // Send notification
+    try {
       await sendAppNotification(
         'নতুন নোটিশ প্রকাশিত হয়েছে!',
         `${newNotice.title}`,
         'notice',
         'announcement'
       );
-    } catch (err) {
-      console.warn('Failed to save announcement to Firestore:', err);
-    }
+    } catch {}
   };
 
   const handlePromptDeleteNotice = (e: React.MouseEvent, id: string) => {

@@ -14,7 +14,6 @@ export type PageId =
   | 'gita'
   | 'prayer'
   | 'rabindra-sangeet'
-  | 'gyan-sarada'
   | 'shopping'
   | 'contact'
   | 'about'

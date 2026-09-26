@@ -33,7 +33,7 @@ import { AboutPage } from './pages/AboutPage';
 import { GalleryPage } from './pages/GalleryPage';
 import { AdminDatabasePage } from './pages/AdminDatabasePage';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
-import { ArrowUp, MapPin, MessageSquare, ShieldCheck, Mail, WifiOff } from 'lucide-react';
+import { ArrowUp, MapPin, MessageSquare, ShieldCheck, Mail, WifiOff, AlertTriangle } from 'lucide-react';
 import { CLUB_INFO } from './data/clubData';
 import { db } from './lib/firebase';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
@@ -53,6 +53,17 @@ export function App() {
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
   const [isOffline, setIsOffline] = useState<boolean>(typeof navigator !== 'undefined' ? !navigator.onLine : false);
+  const [firestoreError, setFirestoreError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (window as any).showFirestoreError = (msg: string) => {
+      console.error('Captured Firestore error:', msg);
+      setFirestoreError(msg);
+    };
+    return () => {
+      delete (window as any).showFirestoreError;
+    };
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setIsOffline(false);
@@ -234,6 +245,40 @@ export function App() {
           >
             <WifiOff className="w-4 h-4 text-stone-950 animate-pulse" />
             <span>অফলাইন মোড সক্রিয় — পূর্বে সংরক্ষিত ক্যাশ ও অফলাইন ডেটা দেখা যাচ্ছে।</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Firestore Error Alert Banner */}
+      <AnimatePresence>
+        {firestoreError && (
+          <motion.div
+            initial={{ opacity: 0, y: -50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -50 }}
+            className="fixed top-20 left-4 right-4 md:left-auto md:right-4 md:w-96 bg-red-950/95 text-red-100 p-4 rounded-2xl border-2 border-red-500 shadow-2xl z-50 font-bengali space-y-2"
+          >
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <h4 className="font-bold text-sm text-red-200">ফায়ারবেস ডাটাবেস এরর! (Firebase Firestore Error)</h4>
+                <p className="text-xs leading-relaxed text-stone-300">
+                  আপনার নতুন ফায়ারবেস প্রজেক্টে (`starclub-b2ab9`) হয়তো **Firestore Database**-টি এখনো তৈরি করা হয়নি অথবা অ্যাক্সেস ব্লক রয়েছে।
+                </p>
+                <div className="bg-black/40 p-2 rounded-lg text-[10px] font-mono text-red-300 overflow-x-auto select-all max-h-20 max-w-full">
+                  {firestoreError}
+                </div>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px]">
+              <span className="text-stone-400">সমাধান করতে ফায়ারবেস রুলস চেক করুন।</span>
+              <button
+                onClick={() => setFirestoreError(null)}
+                className="px-2.5 py-1 rounded bg-red-500/20 hover:bg-red-500/40 text-red-300 font-bold transition-colors"
+              >
+                বন্ধ করুন
+              </button>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

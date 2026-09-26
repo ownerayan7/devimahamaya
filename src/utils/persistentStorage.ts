@@ -133,3 +133,66 @@ export function mergeItemsWithLocal<T extends { id: string | number; createdAt?:
   merged.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   return merged;
 }
+
+/**
+ * Uploads items to PostgreSQL Cloud SQL backend as a reliable fallback when Firebase is offline/blocked.
+ */
+export async function uploadToFallbackServer(category: string, title: string, description: string, item: any): Promise<any> {
+  try {
+    const res = await fetch('/api/dual-sync/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        title,
+        category, // This goes to club_records.category
+        description,
+        metadata: item, // Store the full object in metadata
+        entityType: category, // This goes to sync_logs.entity_type
+        uploadedBy: item.authorName || item.uploadedBy || 'Admin/User',
+      })
+    });
+    if (res.ok) {
+      return await res.json();
+    }
+  } catch (err) {
+    console.warn(`Fallback server upload failed for category ${category}:`, err);
+  }
+  return null;
+}
+
+/**
+ * Fetches items from PostgreSQL Cloud SQL backend as a fallback when Firebase is down/empty.
+ */
+export async function fetchFromFallbackServer<T>(category: string): Promise<T[]> {
+  try {
+    const res = await fetch('/api/club-records');
+    if (res.ok) {
+      const records = await res.json();
+      if (Array.isArray(records)) {
+        // Filter records of this specific category
+        const filtered = records.filter((r: any) => r.category === category);
+        // Map metadata or format back to T
+        return filtered.map((r: any) => {
+          if (r.metadata) {
+            return {
+              ...r.metadata,
+              id: r.metadata.id || String(r.id), // Ensure it has a stable id
+              sqlId: r.id, // Store postgres ID
+            };
+          }
+          return {
+            id: String(r.id),
+            title: r.title,
+            description: r.description,
+            isCustom: true,
+            createdAt: r.createdAt ? new Date(r.createdAt).getTime() : Date.now(),
+          } as unknown as T;
+        });
+      }
+    }
+  } catch (err) {
+    console.warn(`Fallback server fetch failed for category ${category}:`, err);
+  }
+  return [];
+}
+

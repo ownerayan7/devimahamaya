@@ -27,7 +27,8 @@ import { deleteVideoBlob, getVideoBlob } from '../utils/videoStorageHelper';
 import { isDirectVideoUrl } from '../utils/mediaEmbedHelper';
 import { db } from '../lib/firebase';
 import { doc, onSnapshot, setDoc, collection, addDoc, deleteDoc } from 'firebase/firestore';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
+import { socket } from '../lib/socket';
 
 const INITIAL_PRAYER_ITEMS: PrayerItem[] = [
   {
@@ -141,9 +142,45 @@ export const SundayPrayerPage: React.FC = () => {
       });
     }, (err) => {
       console.warn('Prayer items Firestore listener notice:', err);
+      if (typeof (window as any).showFirestoreError === 'function') {
+        (window as any).showFirestoreError(`prayerItems read failed: ${err.message || err}`);
+      }
     });
 
-    return () => unsub();
+    // PostgreSQL Hybrid Sync Fallback
+    fetchFromFallbackServer<PrayerItem>('prayer_item').then((sqlPrayers) => {
+      if (sqlPrayers && sqlPrayers.length > 0) {
+        loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((local) => {
+          const mergedCustom = mergeItemsWithLocal(sqlPrayers, local);
+          savePersistentItems(LOCAL_STORAGE_KEY, mergedCustom);
+          setItems([...INITIAL_PRAYER_ITEMS, ...mergedCustom.filter(p => !INITIAL_PRAYER_ITEMS.some(i => i.id === p.id))]);
+        });
+      }
+    }).catch(err => console.warn('Prayers SQL fallback load notice:', err));
+
+    // WebSocket (Socket.IO) Real-time sync (Facebook/YouTube style)
+    const handleRemoteItem = (data: any) => {
+      if (data && data.category === 'prayer_item' && data.item) {
+        console.log('[WebSocket] Real-time prayer received:', data.item);
+        loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((local) => {
+          if (local.some((p) => p.id === data.item.id)) return;
+          const updatedCustom = [data.item, ...local];
+          savePersistentItems(LOCAL_STORAGE_KEY, updatedCustom);
+          setItems([...INITIAL_PRAYER_ITEMS, ...updatedCustom.filter(p => !INITIAL_PRAYER_ITEMS.some(i => i.id === p.id))]);
+        });
+      }
+    };
+
+    if (socket) {
+      socket.on('item_uploaded', handleRemoteItem);
+    }
+
+    return () => {
+      unsub();
+      if (socket) {
+        socket.off('item_uploaded', handleRemoteItem);
+      }
+    };
   }, []);
 
   // Resolve Local IndexedDB video blob for fallback player if configured
@@ -210,8 +247,18 @@ export const SundayPrayerPage: React.FC = () => {
 
     try {
       await setDoc(doc(db, 'prayerItems', itemWithTime.id), itemWithTime);
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Failed to add prayer item to Firestore:', e);
+      if (typeof (window as any).showFirestoreError === 'function') {
+        (window as any).showFirestoreError(`prayerItems save failed: ${e.message || e}`);
+      }
+    }
+
+    // PostgreSQL backup upload for 100% resilient cross-device syncing
+    try {
+      await uploadToFallbackServer('prayer_item', itemWithTime.title, itemWithTime.description || '', itemWithTime);
+    } catch (sqlErr) {
+      console.warn('SQL fallback upload notice for prayer item:', sqlErr);
     }
   };
 
@@ -222,8 +269,11 @@ export const SundayPrayerPage: React.FC = () => {
     } catch (e) {}
     try {
       await setDoc(doc(db, 'appSettings', 'prayerLiveConfig'), newCfg, { merge: true });
-    } catch (e) {
+    } catch (e: any) {
       console.warn('Failed to save live config to Firestore:', e);
+      if (typeof (window as any).showFirestoreError === 'function') {
+        (window as any).showFirestoreError(`prayerLiveConfig save failed: ${e.message || e}`);
+      }
     }
   };
 

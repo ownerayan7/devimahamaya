@@ -16,12 +16,37 @@ import {
   createSyncLog,
   deleteSyncLog
 } from './src/db/users.ts';
+import { createServer } from 'http';
+import { Server } from 'socket.io';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
+
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: '*',
+    methods: ['GET', 'POST']
+  }
+});
+
+// Configure Socket.IO real-time event broadcasting (Facebook & YouTube style WebSockets)
+io.on('connection', (socket) => {
+  console.log(`[WebSocket] Client connected: ${socket.id}`);
+
+  // When an admin or user uploads any item, broadcast it to all other active clients immediately
+  socket.on('upload_item', (data) => {
+    console.log(`[WebSocket] Broad-casting uploaded item for category: ${data?.category}`);
+    socket.broadcast.emit('item_uploaded', data);
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`[WebSocket] Client disconnected: ${socket.id}`);
+  });
+});
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
@@ -432,6 +457,25 @@ app.post('/api/dual-sync/upload', async (req, res) => {
       req.headers['user-agent'] || 'Web Browser'
     );
 
+    // 3. Emit real-time Socket.IO event immediately to all active clients (Facebook/YouTube style)
+    try {
+      io.emit('item_uploaded', {
+        category,
+        title,
+        description,
+        item: metadata || {
+          id: String(clubRecord.id),
+          title: title,
+          description: description,
+          isCustom: true,
+          createdAt: Date.now()
+        }
+      });
+      console.log(`[WebSocket] Dual-sync HTTP upload triggered real-time emission for category: ${category}`);
+    } catch (wsErr) {
+      console.warn('Socket emit error during dual sync upload:', wsErr);
+    }
+
     res.json({
       success: true,
       message: 'Successfully saved to Cloud SQL and logged dual sync event',
@@ -489,8 +533,8 @@ async function startServer() {
     }
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  httpServer.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server running with Socket.io on http://0.0.0.0:${PORT}`);
   });
 }
 

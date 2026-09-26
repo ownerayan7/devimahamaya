@@ -19,6 +19,8 @@ import { ImageLightbox } from './ImageLightbox';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { sendAppNotification } from '../utils/notificationHelper';
+import { uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
+import { socket } from '../lib/socket';
 
 export const MemberCommunityGallery: React.FC = () => {
   const [memberPhotos, setMemberPhotos] = useState<MemberPhotoItem[]>(() => {
@@ -63,9 +65,52 @@ export const MemberCommunityGallery: React.FC = () => {
       }
     }, (err) => {
       console.warn('Firestore memberPhotos sync notice:', err);
+      if (typeof (window as any).showFirestoreError === 'function') {
+        (window as any).showFirestoreError(`memberPhotos read failed: ${err.message || err}`);
+      }
     });
 
-    return () => unsubscribe();
+    // PostgreSQL Hybrid Sync Fallback
+    fetchFromFallbackServer<MemberPhotoItem>('member_photo').then((sqlPhotos) => {
+      if (sqlPhotos && sqlPhotos.length > 0) {
+        setMemberPhotos((prev) => {
+          const merged = [...sqlPhotos, ...prev];
+          const uniqueMap = new Map<string, MemberPhotoItem>();
+          merged.forEach(p => uniqueMap.set(p.id, p));
+          const sorted = Array.from(uniqueMap.values()).sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+          try {
+            localStorage.setItem('11star_member_photos_storage', JSON.stringify(sorted));
+          } catch {}
+          return sorted;
+        });
+      }
+    }).catch(err => console.warn('Member photos SQL fallback load notice:', err));
+
+    // WebSocket (Socket.IO) Real-time sync (Facebook/YouTube style)
+    const handleRemoteItem = (data: any) => {
+      if (data && data.category === 'member_photo' && data.item) {
+        console.log('[WebSocket] Real-time member photo received:', data.item);
+        setMemberPhotos((prev) => {
+          if (prev.some((p) => p.id === data.item.id)) return prev;
+          const sorted = [data.item, ...prev].sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+          try {
+            localStorage.setItem('11star_member_photos_storage', JSON.stringify(sorted));
+          } catch {}
+          return sorted;
+        });
+      }
+    };
+
+    if (socket) {
+      socket.on('item_uploaded', handleRemoteItem);
+    }
+
+    return () => {
+      unsubscribe();
+      if (socket) {
+        socket.off('item_uploaded', handleRemoteItem);
+      }
+    };
   }, []);
 
   const handleAddPhoto = async (newPhoto: MemberPhotoItem) => {
@@ -75,17 +120,29 @@ export const MemberCommunityGallery: React.FC = () => {
     };
     try {
       await setDoc(doc(db, 'memberPhotos', newPhoto.id), itemWithTime);
-      
-      // Send notification
+    } catch (e: any) {
+      console.error('Failed to save photo to Firestore:', e);
+      if (typeof (window as any).showFirestoreError === 'function') {
+        (window as any).showFirestoreError(`memberPhotos save failed: ${e.message || e}`);
+      }
+    }
+
+    // PostgreSQL backup upload for 100% resilient cross-device syncing
+    try {
+      await uploadToFallbackServer('member_photo', newPhoto.title, newPhoto.caption || '', itemWithTime);
+    } catch (sqlErr) {
+      console.warn('SQL fallback upload notice for member photo:', sqlErr);
+    }
+
+    // Send notification
+    try {
       await sendAppNotification(
         'সদস্যদের নতুন ছবি!',
         `${newPhoto.authorName || 'একজন সদস্য'} নতুন ছবি শেয়ার করেছেন।`,
         'media',
         'gallery'
       );
-    } catch (e) {
-      console.error('Failed to save photo to Firestore:', e);
-    }
+    } catch {}
   };
 
   const handleDeletePhoto = async (e: React.MouseEvent, id: string) => {

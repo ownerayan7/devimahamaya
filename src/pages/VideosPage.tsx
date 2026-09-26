@@ -32,7 +32,8 @@ import { broadcastMediaPlaybackStarted, registerHtmlMediaElement, subscribeToMed
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { sendAppNotification } from '../utils/notificationHelper';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
+import { socket } from '../lib/socket';
 
 const LOCAL_STORAGE_KEY = '11star_custom_official_videos_v2';
 
@@ -159,11 +160,61 @@ export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) =>
         },
         (err) => {
           console.warn('Firestore officialVideos snapshot notice:', err);
+          if (typeof (window as any).showFirestoreError === 'function') {
+            (window as any).showFirestoreError(`officialVideos read failed: ${err.message || err}`);
+          }
         }
       );
-      return () => unsub();
-    } catch (e) {
+
+      // PostgreSQL Hybrid Sync Fallback
+      fetchFromFallbackServer<VideoItem>('official_video').then((sqlVideos) => {
+        if (sqlVideos && sqlVideos.length > 0) {
+          loadPersistentItems<VideoItem>(LOCAL_STORAGE_KEY).then((local) => {
+            const merged = mergeItemsWithLocal(sqlVideos, local);
+            merged.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
+            setCustomVideos(merged);
+            savePersistentItems(LOCAL_STORAGE_KEY, merged);
+
+            if (!hasUserManuallySelectedRef.current && merged.length > 0) {
+              handleSelectVideo(merged[0], false, false);
+            }
+          });
+        }
+      }).catch(err => console.warn('Videos SQL fallback load notice:', err));
+
+      // WebSocket (Socket.IO) Real-time sync (Facebook/YouTube style)
+      const handleRemoteItem = (data: any) => {
+        if (data && data.category === 'official_video' && data.item) {
+          console.log('[WebSocket] Real-time official video received:', data.item);
+          loadPersistentItems<VideoItem>(LOCAL_STORAGE_KEY).then((local) => {
+            if (local.some((v) => v.id === data.item.id)) return;
+            const updated = [data.item, ...local];
+            updated.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
+            setCustomVideos(updated);
+            savePersistentItems(LOCAL_STORAGE_KEY, updated);
+
+            if (!hasUserManuallySelectedRef.current && updated.length > 0) {
+              handleSelectVideo(updated[0], false, false);
+            }
+          });
+        }
+      };
+
+      if (socket) {
+        socket.on('item_uploaded', handleRemoteItem);
+      }
+
+      return () => {
+        unsub();
+        if (socket) {
+          socket.off('item_uploaded', handleRemoteItem);
+        }
+      };
+    } catch (e: any) {
       console.warn('Firestore officialVideos listener notice:', e);
+      if (typeof (window as any).showFirestoreError === 'function') {
+        (window as any).showFirestoreError(`officialVideos listener failed: ${e.message || e}`);
+      }
     }
   }, []);
 
@@ -217,17 +268,29 @@ export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) =>
         videoFileUrl: videoWithTime.videoFileUrl?.startsWith('blob:') ? '' : videoWithTime.videoFileUrl,
         createdAt: videoWithTime.createdAt
       });
-      
-      // Send notification
+    } catch (err: any) {
+      console.warn('Firestore officialVideos write fallback:', err);
+      if (typeof (window as any).showFirestoreError === 'function') {
+        (window as any).showFirestoreError(`officialVideos save failed: ${err.message || err}`);
+      }
+    }
+
+    // PostgreSQL backup upload for 100% resilient cross-device syncing
+    try {
+      await uploadToFallbackServer('official_video', videoWithTime.title, videoWithTime.description || '', videoWithTime);
+    } catch (sqlErr) {
+      console.warn('SQL fallback upload notice for official video:', sqlErr);
+    }
+
+    // Send notification
+    try {
       await sendAppNotification(
         'নতুন ভিডিও যোগ করা হয়েছে!',
         `অফিসিয়াল ভিডিও: ${videoWithTime.title}`,
         'media',
         'videos'
       );
-    } catch (err) {
-      console.warn('Firestore officialVideos write fallback:', err);
-    }
+    } catch {}
   };
 
   const handlePromptDeleteOfficialVideo = (e: React.MouseEvent, id: string) => {
