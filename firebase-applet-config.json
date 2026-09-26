@@ -1,12 +1,10 @@
 {
-  "projectId": "stone-entropy-7thv3",
-  "appId": "1:100769117953:web:f065591d6dcab7a6ae4d00",
-  "apiKey": "AIzaSyDMXoxndePCdUcrq0dlLNMghbahwPeq_0A",
-  "authDomain": "stone-entropy-7thv3.firebaseapp.com",
-  "firestoreDatabaseId": "ai-studio-11starclub-8ce76fc1-fb12-4bc5-aa17-1da716cd4bde",
-  "storageBucket": "stone-entropy-7thv3.firebasestorage.app",
-  "messagingSenderId": "100769117953",
-  "measurementId": "",
-  "oAuthClientId": "100769117953-qvqj833smtfc8bng4pfn7o00o93vu3ke.apps.googleusercontent.com",
-  "recaptchaSiteKey": ""
+  "apiKey": "AIzaSyDHiNHPYc46K6WQAVUgs5t3Fe_LfqfzbvE",
+  "authDomain": "starclub-b2ab9.firebaseapp.com",
+  "projectId": "starclub-b2ab9",
+  "storageBucket": "starclub-b2ab9.firebasestorage.app",
+  "messagingSenderId": "1046393963584",
+  "appId": "1:1046393963584:web:1d0096d587bfbaf98dcba5",
+  "measurementId": "G-4Z3BKQX9VP",
+  "firestoreDatabaseId": "(default)"
 }

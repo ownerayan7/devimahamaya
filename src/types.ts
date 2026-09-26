@@ -14,6 +14,7 @@ export type PageId =
   | 'gita'
   | 'prayer'
   | 'rabindra-sangeet'
+  | 'gyan-sarada'
   | 'shopping'
   | 'contact'
   | 'about'
@@ -199,3 +200,20 @@ export interface MemberPhotoItem {
   likes?: number;
   isCustom?: boolean;
 }
+
+export interface GyanSaradaChannel {
+  id: string;
+  title: string;
+  category: string;
+  categoryBengali: string;
+  platform: 'youtube' | 'facebook' | 'web';
+  channelUrl: string;
+  embedUrl?: string;
+  description: string;
+  thumbnailUrl: string;
+  subscribersOrFollowers?: string;
+  featured?: boolean;
+  isCustom?: boolean;
+  createdAt?: string | number;
+}
+

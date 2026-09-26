@@ -106,11 +106,11 @@ export const GyanSaradaPage: React.FC<GyanSaradaPageProps> = ({ onNavigate }) =>
 
           loadPersistentItems<GyanSaradaChannel>(LOCAL_STORAGE_KEY).then((local) => {
             const baseItems = local && local.length > 0 ? local : INITIAL_GYAN_SARADA_CHANNELS;
-            const merged = mergeItemsWithLocal(firestoreItems, baseItems);
-            merged.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+            const merged = mergeItemsWithLocal<GyanSaradaChannel>(firestoreItems, baseItems);
+            merged.sort((a: any, b: any) => Number(b.createdAt || 0) - Number(a.createdAt || 0));
 
             const currentDeleted = getDeletedIds();
-            const cleanList = merged.filter((c) => !currentDeleted.includes(c.id));
+            const cleanList = merged.filter((c) => !currentDeleted.includes(String(c.id)));
 
             setChannels(cleanList);
             savePersistentItems(LOCAL_STORAGE_KEY, cleanList);

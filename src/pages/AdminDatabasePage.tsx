@@ -29,7 +29,9 @@ import {
   Check,
   Trash2,
   Eye,
-  EyeOff
+  EyeOff,
+  ExternalLink,
+  X
 } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
 import { db, auth } from '../lib/firebase';
@@ -103,6 +105,8 @@ export const AdminDatabasePage: React.FC = () => {
 
   // Copy Feedback State
   const [copiedUid, setCopiedUid] = useState(false);
+  const [authDomainErrorModal, setAuthDomainErrorModal] = useState(false);
+  const [copiedDomain, setCopiedDomain] = useState(false);
 
   // Monitor Auth state
   useEffect(() => {
@@ -269,10 +273,26 @@ export const AdminDatabasePage: React.FC = () => {
   const handleGoogleSignIn = async () => {
     try {
       const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
       await signInWithPopup(auth, provider);
     } catch (err: any) {
       console.error('Google Sign-In Error:', err);
-      alert(`গুগল সাইন-ইন সমস্যা: ${err.message}`);
+      if (err.code === 'auth/unauthorized-domain' || err.message?.includes('unauthorized-domain')) {
+        setAuthDomainErrorModal(true);
+      } else if (err.code === 'auth/popup-closed-by-user' || err.code === 'auth/cancelled-popup-request') {
+        // User closed the popup, no intrusive error needed
+      } else {
+        alert(`গুগল সাইন-ইন সমস্যা: ${err.message || 'অনুগ্রহ করে পুনরায় চেষ্টা করুন।'}`);
+      }
+    }
+  };
+
+  const handleCopyDomain = () => {
+    if (typeof window !== 'undefined') {
+      const host = window.location.hostname;
+      navigator.clipboard.writeText(host);
+      setCopiedDomain(true);
+      setTimeout(() => setCopiedDomain(false), 2500);
     }
   };
 
@@ -612,6 +632,20 @@ export const AdminDatabasePage: React.FC = () => {
                 </button>
               </div>
             )}
+          </div>
+
+          {/* Domain Notice Banner */}
+          <div className="p-2.5 rounded-xl bg-amber-500/5 border border-amber-500/15 flex items-center justify-between text-[11px] text-stone-400">
+            <span className="flex items-center gap-1.5 truncate">
+              <Globe className="w-3.5 h-3.5 text-amber-400/80 shrink-0" />
+              <span className="truncate">ডোমেন: <span className="font-mono text-amber-300 font-semibold">{typeof window !== 'undefined' ? window.location.hostname : '11starclub.site'}</span></span>
+            </span>
+            <button
+              onClick={() => setAuthDomainErrorModal(true)}
+              className="text-amber-400 hover:text-amber-300 underline font-medium text-[11px] shrink-0 ml-2 cursor-pointer"
+            >
+              ডোমেন অনুমোদন সহায়িকা
+            </button>
           </div>
         </div>
 
@@ -1201,6 +1235,95 @@ export const AdminDatabasePage: React.FC = () => {
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Firebase Authorized Domain Helper Modal */}
+      <AnimatePresence>
+        {authDomainErrorModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-stone-900 border border-amber-500/40 rounded-3xl p-6 sm:p-7 max-w-lg w-full text-stone-200 space-y-5 shadow-2xl relative"
+            >
+              {/* Close Button */}
+              <button
+                onClick={() => setAuthDomainErrorModal(false)}
+                className="absolute top-4 right-4 p-2 text-stone-400 hover:text-white rounded-full bg-white/5 hover:bg-white/10 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              <div className="flex items-start gap-4">
+                <div className="p-3 rounded-2xl bg-amber-500/20 border border-amber-500/40 text-amber-400 shrink-0">
+                  <AlertTriangle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-amber-300 font-serif-bengali">
+                    Firebase ডোমেন অনুমোদন প্রয়োজন
+                  </h3>
+                  <p className="text-xs text-stone-400 mt-1">
+                    ত্রুটি কোড: <span className="font-mono text-amber-400">auth/unauthorized-domain</span>
+                  </p>
+                </div>
+              </div>
+
+              <div className="p-4 rounded-2xl bg-black/60 border border-white/10 text-xs text-stone-300 space-y-3 font-bengali leading-relaxed">
+                <p>
+                  আপনার বর্তমান ডোমেন <strong className="text-amber-400 font-mono text-sm">{typeof window !== 'undefined' ? window.location.hostname : '11starclub.site'}</strong> Firebase Authentication-এর অনুমোদিত তালিকায় যুক্ত নেই। Google এর নিরাপত্তা নীতির কারণে অনুমোদিত তালিকা ছাড়া সাইন-ইন বন্ধ থাকে।
+                </p>
+
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 space-y-2">
+                  <div className="text-amber-300 font-bold text-[13px] flex items-center gap-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-amber-400" />
+                    <span>১ মিনিটের সমাধান নির্দেশিকা:</span>
+                  </div>
+                  <ol className="list-decimal list-inside space-y-1.5 text-stone-300 pl-1">
+                    <li>নিচের <strong className="text-amber-300">"Firebase Console খুলুন"</strong> বাটনে ট্যাপ করুন।</li>
+                    <li><strong>Authentication</strong> ট্যাবের ভেতরে <strong>Settings</strong> অপশনে যান।</li>
+                    <li><strong>Authorized domains</strong> সেকশনে <strong>Add domain</strong> এ ক্লিক করে আপনার ডোমেন যোগ করুন।</li>
+                  </ol>
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-stone-950 border border-white/10">
+                  <div className="font-mono text-xs text-amber-300 font-bold truncate pr-2">
+                    {typeof window !== 'undefined' ? window.location.hostname : '11starclub.site'}
+                  </div>
+                  <button
+                    onClick={handleCopyDomain}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 text-xs font-semibold transition-all shrink-0 active:scale-95 cursor-pointer"
+                  >
+                    {copiedDomain ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
+                    <span>{copiedDomain ? 'কপি হয়েছে!' : 'ডোমেন কপি করুন'}</span>
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-stone-400">
+                  💡 <em>টিপস: এই পোর্টালে কাজ করার জন্য গুগল লগইন বাধ্যতামূলক নয়। আপনার মাস্টার পাসওয়ার্ড দিয়ে আনলক করলেই সমস্ত ডাটাবেস কন্ট্রোল পাওয়া যায়।</em>
+                </p>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-3 pt-1">
+                <a
+                  href="https://console.firebase.google.com/project/stone-entropy-7thv3/authentication/settings"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 py-2.5 px-4 rounded-xl bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-stone-950 font-bold text-xs flex items-center justify-center gap-2 shadow-lg transition-all"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  <span>Firebase Console খুলুন</span>
+                </a>
+                <button
+                  onClick={() => setAuthDomainErrorModal(false)}
+                  className="py-2.5 px-4 rounded-xl bg-stone-800 hover:bg-stone-700 text-stone-300 font-semibold text-xs border border-white/10 transition-colors"
+                >
+                  বন্ধ করুন
+                </button>
+              </div>
             </motion.div>
           </div>
         )}

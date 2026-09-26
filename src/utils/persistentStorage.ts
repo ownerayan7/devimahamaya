@@ -115,7 +115,7 @@ export async function loadPersistentItems<T extends { id: string | number }>(key
 /**
  * Utility to merge items from Firestore snapshot with local items, ensuring newly added local items are never overwritten.
  */
-export function mergeItemsWithLocal<T extends { id: string | number; createdAt?: number }>(
+export function mergeItemsWithLocal<T extends { id: string | number; createdAt?: any }>(
   firestoreItems: T[],
   localItems: T[]
 ): T[] {
