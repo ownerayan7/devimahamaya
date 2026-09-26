@@ -252,6 +252,10 @@ export const MahalayaPage: React.FC = () => {
                 href={MAHALAYA_PLAYLIST.youtubeUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.open(MAHALAYA_PLAYLIST.youtubeUrl, '_blank', 'noopener,noreferrer');
+                }}
                 className="w-full py-2.5 px-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 transition-colors shadow-[0_0_15px_rgba(239,68,68,0.4)]"
               >
                 <span>সম্পূর্ণ মহালয়া প্লেলিস্ট খুলুন</span>

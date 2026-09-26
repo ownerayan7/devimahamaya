@@ -24,6 +24,7 @@ export const Footer: React.FC<FooterProps> = ({ onNavigate, onReplayWelcome }) =
   const quickLinks: Array<{ id: PageId; label: string }> = [
     { id: 'home', label: 'হোম পেজ (Home)' },
     { id: 'durga-puja', label: 'শারদীয়া দুর্গাপূজা ২০২৬' },
+    { id: 'gyan-sarada', label: 'জ্ঞান সারদা (শিক্ষামূলক হাব)' },
     { id: 'social-services', label: 'সামাজিক সেবাসমূহ' },
     { id: 'prayer', label: 'প্রার্থনা' },
     { id: 'rabindra-sangeet', label: 'রবীন্দ্র সঙ্গীত' },

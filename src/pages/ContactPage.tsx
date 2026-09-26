@@ -155,6 +155,10 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onOpenAdminInbox }) =>
                 href={CLUB_INFO.facebookUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.open(CLUB_INFO.facebookUrl, '_blank', 'noopener,noreferrer');
+                }}
                 className="w-full p-3 rounded-xl bg-[#1877F2]/15 hover:bg-[#1877F2]/25 border border-[#1877F2]/40 text-blue-200 text-xs font-bold transition-colors flex items-center justify-between"
               >
                 <div className="flex items-center gap-2.5">
@@ -168,6 +172,10 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onOpenAdminInbox }) =>
                 href={CLUB_INFO.whatsappChannelUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.open(CLUB_INFO.whatsappChannelUrl, '_blank', 'noopener,noreferrer');
+                }}
                 className="w-full p-3 rounded-xl bg-[#25D366]/15 hover:bg-[#25D366]/25 border border-[#25D366]/40 text-emerald-200 text-xs font-bold transition-colors flex items-center justify-between"
               >
                 <div className="flex items-center gap-2.5">
@@ -181,6 +189,10 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onOpenAdminInbox }) =>
                 href={CLUB_INFO.youtubeChannelUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.open(CLUB_INFO.youtubeChannelUrl, '_blank', 'noopener,noreferrer');
+                }}
                 className="w-full p-3 rounded-xl bg-[#FF0000]/15 hover:bg-[#FF0000]/25 border border-[#FF0000]/40 text-red-200 text-xs font-bold transition-colors flex items-center justify-between"
               >
                 <div className="flex items-center gap-2.5">
@@ -194,6 +206,10 @@ export const ContactPage: React.FC<ContactPageProps> = ({ onOpenAdminInbox }) =>
                 href={CLUB_INFO.instagramUrl}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.open(CLUB_INFO.instagramUrl, '_blank', 'noopener,noreferrer');
+                }}
                 className="w-full p-3 rounded-xl bg-[#E4405F]/15 hover:bg-[#E4405F]/25 border border-[#E4405F]/40 text-pink-200 text-xs font-bold transition-colors flex items-center justify-between"
               >
                 <div className="flex items-center gap-2.5">

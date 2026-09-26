@@ -518,6 +518,10 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onOpenInstallMod
                     href={CLUB_INFO.youtubeChannelUrl}
                     target="_blank"
                     rel="noopener noreferrer"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      window.open(CLUB_INFO.youtubeChannelUrl, '_blank', 'noopener,noreferrer');
+                    }}
                     className="px-5 py-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-200 font-semibold text-xs transition-all flex items-center justify-center gap-1.5"
                   >
                     <span>YouTube চ্যানেল সাবস্ক্রাইব</span>

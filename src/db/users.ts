@@ -1,5 +1,5 @@
 import { db } from './index.ts';
-import { users, clubRecords, treePlantationRecords, workspaceItems } from './schema.ts';
+import { users, clubRecords, treePlantationRecords, workspaceItems, syncLogs } from './schema.ts';
 import { eq, desc } from 'drizzle-orm';
 
 export async function getOrCreateUser(uid: string, email: string, displayName?: string, photoURL?: string) {
@@ -131,5 +131,59 @@ export async function saveWorkspaceItem(userUid: string, service: string, extern
   } catch (error) {
     console.error('Database saveWorkspaceItem failed:', error);
     return { id: Date.now(), userUid, service, externalId, title, data };
+  }
+}
+
+export async function getSyncLogs() {
+  try {
+    if (!db) return [];
+    return await db.select().from(syncLogs).orderBy(desc(syncLogs.createdAt)).limit(50);
+  } catch (error) {
+    console.error('Database getSyncLogs failed:', error);
+    return [];
+  }
+}
+
+export async function createSyncLog(
+  source: string,
+  entityType: string,
+  title: string,
+  content?: string,
+  firestoreDocId?: string,
+  cloudSqlId?: number,
+  uploadedBy?: string,
+  deviceInfo?: string
+) {
+  try {
+    if (!db) {
+      return { id: Date.now(), source, entityType, title, content, firestoreDocId, cloudSqlId, uploadedBy, deviceInfo, createdAt: new Date() };
+    }
+    const result = await db.insert(syncLogs)
+      .values({
+        source,
+        entityType,
+        title,
+        content: content || null,
+        firestoreDocId: firestoreDocId || null,
+        cloudSqlId: cloudSqlId || null,
+        uploadedBy: uploadedBy || 'Admin / User',
+        deviceInfo: deviceInfo || 'Web Browser',
+      })
+      .returning();
+    return result[0];
+  } catch (error) {
+    console.error('Database createSyncLog failed:', error);
+    return { id: Date.now(), source, entityType, title, content, firestoreDocId, cloudSqlId, uploadedBy, deviceInfo, createdAt: new Date() };
+  }
+}
+
+export async function deleteSyncLog(id: number) {
+  try {
+    if (!db) return true;
+    await db.delete(syncLogs).where(eq(syncLogs.id, id));
+    return true;
+  } catch (error) {
+    console.error('Database deleteSyncLog failed:', error);
+    return false;
   }
 }

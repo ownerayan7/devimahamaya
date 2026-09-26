@@ -79,6 +79,12 @@ service cloud.firestore {
       allow write: if true;
     }
 
+    // Dual Sync Logs
+    match /syncLogs/{logId} {
+      allow read: if true;
+      allow write: if true;
+    }
+
     // Default deny for unmapped documents
     match /{document=**} {
       allow read, write: if false;

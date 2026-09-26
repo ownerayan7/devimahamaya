@@ -31,8 +31,9 @@ import { ShoppingPage } from './pages/ShoppingPage';
 import { ContactPage } from './pages/ContactPage';
 import { AboutPage } from './pages/AboutPage';
 import { GalleryPage } from './pages/GalleryPage';
+import { AdminDatabasePage } from './pages/AdminDatabasePage';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
-import { ArrowUp, MapPin, MessageSquare, ShieldCheck, Mail } from 'lucide-react';
+import { ArrowUp, MapPin, MessageSquare, ShieldCheck, Mail, WifiOff } from 'lucide-react';
 import { CLUB_INFO } from './data/clubData';
 import { db } from './lib/firebase';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
@@ -51,6 +52,18 @@ export function App() {
   const [isAdminStorageOpen, setIsAdminStorageOpen] = useState(false);
   const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
   const [isNotificationModalOpen, setIsNotificationModalOpen] = useState(false);
+  const [isOffline, setIsOffline] = useState<boolean>(typeof navigator !== 'undefined' ? !navigator.onLine : false);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOffline(false);
+    const handleOffline = () => setIsOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   // Background Lock Screen Notification listener for new alerts via Firestore
   useEffect(() => {
@@ -180,6 +193,8 @@ export function App() {
         return <AboutPage />;
       case 'gallery':
         return <GalleryPage onOpenAdminStorage={() => setIsAdminStorageOpen(true)} />;
+      case 'admin-db':
+        return <AdminDatabasePage />;
       default:
         return (
           <HomePage
@@ -205,6 +220,21 @@ export function App() {
             reducedMotion={reducedMotion}
             onToggleReducedMotion={handleToggleReducedMotion}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Offline Mode Alert Bar */}
+      <AnimatePresence>
+        {isOffline && (
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="bg-amber-500 text-stone-950 font-bold px-4 py-1.5 text-xs text-center flex items-center justify-center gap-2 z-50 sticky top-0 shadow-md border-b border-amber-400 font-bengali"
+          >
+            <WifiOff className="w-4 h-4 text-stone-950 animate-pulse" />
+            <span>অফলাইন মোড সক্রিয় — পূর্বে সংরক্ষিত ক্যাশ ও অফলাইন ডেটা দেখা যাচ্ছে।</span>
+          </motion.div>
         )}
       </AnimatePresence>
 

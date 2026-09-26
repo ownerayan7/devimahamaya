@@ -46,6 +46,20 @@ export const workspaceItems = pgTable('workspace_items', {
   syncedAt: timestamp('synced_at').defaultNow(),
 });
 
+// Dual sync logs between Firestore and Cloud SQL
+export const syncLogs = pgTable('sync_logs', {
+  id: serial('id').primaryKey(),
+  source: text('source').notNull(), // 'firestore' | 'cloudsql' | 'dual'
+  entityType: text('entity_type').notNull(), // 'announcement' | 'notification' | 'record' | 'upload_test'
+  title: text('title').notNull(),
+  content: text('content'),
+  firestoreDocId: text('firestore_doc_id'),
+  cloudSqlId: integer('cloud_sql_id'),
+  uploadedBy: text('uploaded_by'),
+  deviceInfo: text('device_info'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   records: many(clubRecords),

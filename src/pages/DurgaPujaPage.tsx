@@ -198,6 +198,10 @@ export const DurgaPujaPage: React.FC<DurgaPujaPageProps> = ({ onOpenAdminStorage
               href={CLUB_INFO.whatsappChannelUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => {
+                e.preventDefault();
+                window.open(CLUB_INFO.whatsappChannelUrl, '_blank', 'noopener,noreferrer');
+              }}
               className="px-4 py-2 rounded-xl bg-emerald-600/20 hover:bg-emerald-600/35 border border-emerald-500/40 text-emerald-200 text-xs font-semibold flex items-center gap-1.5 transition-all"
             >
               <span>WhatsApp চ্যানেলে নোটিফিকেশন পান</span>
@@ -207,6 +211,10 @@ export const DurgaPujaPage: React.FC<DurgaPujaPageProps> = ({ onOpenAdminStorage
               href={CLUB_INFO.googleMapsUrl}
               target="_blank"
               rel="noopener noreferrer"
+              onClick={(e) => {
+                e.preventDefault();
+                window.open(CLUB_INFO.googleMapsUrl, '_blank', 'noopener,noreferrer');
+              }}
               className="px-4 py-2 rounded-xl bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/40 text-amber-200 text-xs font-semibold flex items-center gap-1.5 transition-all"
             >
               <span>মণ্ডপে আসার দিকনির্দেশনা (Map)</span>

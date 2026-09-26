@@ -112,6 +112,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'shopping', label: 'Online Shopping', isNew: true, icon: <ShoppingBag className="w-3.5 h-3.5 text-amber-400" /> },
     { id: 'donate', label: 'সহযোগিতা', icon: <HeartHandshake className="w-3.5 h-3.5 text-yellow-400" /> },
     { id: 'contact', label: 'Contact', icon: <Phone className="w-3.5 h-3.5 text-stone-300" /> },
+    { id: 'admin-db', label: 'অ্যাডমিন DB & Auth', isNew: true, isHighlight: true, icon: <Database className="w-3.5 h-3.5 text-cyan-300 animate-pulse" /> },
     { id: 'settings', label: 'সেটিংস', icon: <Settings className="w-3.5 h-3.5 text-amber-300" /> },
   ];
 

@@ -70,6 +70,10 @@ export const DonatePage: React.FC = () => {
           href={CLUB_INFO.stemCellRegistrationUrl}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={(e) => {
+            e.preventDefault();
+            window.open(CLUB_INFO.stemCellRegistrationUrl, '_blank', 'noopener,noreferrer');
+          }}
           className="w-full py-3.5 px-4 rounded-xl bg-gradient-to-r from-red-600 via-rose-500 to-amber-500 hover:from-red-500 hover:to-amber-400 text-white font-bold text-sm transition-all shadow-[0_0_25px_rgba(239,68,68,0.45)] flex items-center justify-center gap-2 group"
         >
           <span>DKMS India-তে স্টেম সেল দাতা হিসেবে রেজিস্টার করুন</span>

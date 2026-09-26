@@ -11,7 +11,10 @@ import {
   getClubRecords, 
   createClubRecord, 
   getTreePlantationRecords, 
-  createTreePlantationRecord 
+  createTreePlantationRecord,
+  getSyncLogs,
+  createSyncLog,
+  deleteSyncLog
 } from './src/db/users.ts';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -345,6 +348,99 @@ app.post('/api/tree-plantation', async (req, res) => {
   } catch (error: any) {
     console.error('Error creating tree plantation record:', error);
     res.status(500).json({ error: error.message || 'Failed to save tree record' });
+  }
+});
+
+// Cloud SQL Database Status & Health endpoint
+app.get('/api/db/status', async (req, res) => {
+  try {
+    const usersList = await getUsers();
+    const recordsList = await getClubRecords();
+    const treeList = await getTreePlantationRecords();
+    const logsList = await getSyncLogs();
+
+    res.json({
+      status: 'connected',
+      engine: 'PostgreSQL (Cloud SQL / Drizzle ORM)',
+      host: process.env.SQL_HOST || 'local_socket_or_proxy',
+      database: process.env.SQL_DB_NAME || '11starclub_db',
+      timestamp: new Date().toISOString(),
+      counts: {
+        users: usersList.length,
+        clubRecords: recordsList.length,
+        treePlantationRecords: treeList.length,
+        syncLogs: logsList.length,
+      },
+    });
+  } catch (error: any) {
+    console.error('Error checking Cloud SQL DB status:', error);
+    res.status(500).json({ status: 'error', error: error.message || 'Cloud SQL status check failed' });
+  }
+});
+
+// Sync logs endpoints
+app.get('/api/sync-logs', async (req, res) => {
+  try {
+    const logs = await getSyncLogs();
+    res.json(logs);
+  } catch (error: any) {
+    console.error('Error fetching sync logs:', error);
+    res.status(500).json({ error: error.message || 'Failed to fetch sync logs' });
+  }
+});
+
+app.post('/api/sync-logs', async (req, res) => {
+  try {
+    const { source, entityType, title, content, firestoreDocId, cloudSqlId, uploadedBy, deviceInfo } = req.body;
+    const log = await createSyncLog(source, entityType, title, content, firestoreDocId, cloudSqlId, uploadedBy, deviceInfo);
+    res.json({ success: true, log });
+  } catch (error: any) {
+    console.error('Error creating sync log:', error);
+    res.status(500).json({ error: error.message || 'Failed to create sync log' });
+  }
+});
+
+app.delete('/api/sync-logs/:id', async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!id) return res.status(400).json({ error: 'Invalid ID' });
+    await deleteSyncLog(id);
+    res.json({ success: true, id });
+  } catch (error: any) {
+    console.error('Error deleting sync log:', error);
+    res.status(500).json({ error: error.message || 'Failed to delete sync log' });
+  }
+});
+
+// Dual Sync Upload Endpoint (Writes to Cloud SQL & logs sync event)
+app.post('/api/dual-sync/upload', async (req, res) => {
+  try {
+    const { title, category, description, metadata, firestoreDocId, uploadedBy, entityType } = req.body;
+    
+    // 1. Create record in Cloud SQL
+    const clubRecord = await createClubRecord(null, title || 'Dual Sync Entry', category || 'general', description || '', metadata || {});
+    
+    // 2. Log sync audit event
+    const syncLog = await createSyncLog(
+      'dual',
+      entityType || 'club_record',
+      title || 'Dual Upload',
+      description || '',
+      firestoreDocId || null,
+      clubRecord.id,
+      uploadedBy || 'Admin',
+      req.headers['user-agent'] || 'Web Browser'
+    );
+
+    res.json({
+      success: true,
+      message: 'Successfully saved to Cloud SQL and logged dual sync event',
+      cloudSqlRecord: clubRecord,
+      syncLog,
+    });
+  } catch (error: any) {
+    console.error('Error executing dual sync upload:', error);
+    res.status(500).json({ error: error.message || 'Dual sync upload failed on server' });
   }
 });
 

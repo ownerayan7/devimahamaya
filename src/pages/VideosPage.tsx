@@ -377,6 +377,10 @@ export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) =>
             href={CLUB_INFO.youtubeChannelUrl}
             target="_blank"
             rel="noopener noreferrer"
+            onClick={(e) => {
+              e.preventDefault();
+              window.open(CLUB_INFO.youtubeChannelUrl, '_blank', 'noopener,noreferrer');
+            }}
             className="px-5 py-2.5 rounded-full bg-red-600 hover:bg-red-500 text-white font-bold text-xs sm:text-sm transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:scale-105 active:scale-95 flex items-center gap-2"
           >
             <Youtube className="w-4 h-4 fill-white" />
