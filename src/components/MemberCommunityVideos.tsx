@@ -27,6 +27,8 @@ import { copyTextToClipboard } from '../utils/clipboardHelper';
 import { broadcastMediaPlaybackStarted, registerHtmlMediaElement } from '../utils/mediaCoordinator';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
+import { uploadToFallbackServer } from '../utils/persistentStorage';
+import { socket } from '../lib/socket';
 
 const STORAGE_KEY = '11star_member_community_videos_v2';
 const LIKES_STORAGE_KEY = '11star_member_video_likes_v2';
@@ -163,6 +165,31 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
             try {
               localStorage.setItem(STORAGE_KEY, JSON.stringify(firestoreList));
             } catch {}
+
+            // --- SMART AUTO BACKGROUND RE-SYNC ---
+            try {
+              const savedLocalRaw = localStorage.getItem('11star_member_videos_storage_local_uploads_v1') || '[]';
+              const localUploads: MemberVideoItem[] = JSON.parse(savedLocalRaw);
+              if (localUploads.length > 0) {
+                const cloudIds = new Set(firestoreList.map(v => String(v.id)));
+                const localOnly = localUploads.filter(v => !cloudIds.has(String(v.id)));
+                if (localOnly.length > 0) {
+                  console.log(`[Auto-Sync] Found ${localOnly.length} local-only member videos. Restoring...`);
+                  localOnly.forEach(async (item) => {
+                    try {
+                      await setDoc(doc(db, 'memberVideos', String(item.id)), item);
+                      await uploadToFallbackServer('member_video', item.title || 'সদস্য ভিডিও', item.description || '', item);
+                      console.log(`[Auto-Sync] Successfully restored member video:`, item.id);
+                    } catch (err) {
+                      console.warn('[Auto-Sync] Failed to restore member video:', item.id, err);
+                    }
+                  });
+                }
+              }
+            } catch (syncErr) {
+              console.warn('[Auto-Sync] Error syncing memberVideos:', syncErr);
+            }
+            // -------------------------------------
           }
         },
         (err) => {
@@ -189,6 +216,17 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
       ...newVideo,
       createdAt: newVideo.createdAt || Date.now()
     };
+
+    // Track locally in the local uploads list for auto-sync engine
+    try {
+      const savedLocalRaw = localStorage.getItem('11star_member_videos_storage_local_uploads_v1') || '[]';
+      const localUploads = JSON.parse(savedLocalRaw);
+      localUploads.push(videoWithTime);
+      localStorage.setItem('11star_member_videos_storage_local_uploads_v1', JSON.stringify(localUploads));
+    } catch (e) {
+      console.warn('Failed to track local video upload:', e);
+    }
+
     const updated = [videoWithTime, ...memberVideos.filter((v) => v.id !== videoWithTime.id)];
     updated.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
     saveVideos(updated);
@@ -202,6 +240,13 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
       await setDoc(doc(db, 'memberVideos', videoWithTime.id), videoWithTime);
     } catch (err) {
       console.warn('Firestore set memberVideo warning:', err);
+    }
+
+    // Sync to PostgreSQL backup
+    try {
+      await uploadToFallbackServer('member_video', videoWithTime.title || 'সদস্য ভিডিও', videoWithTime.description || '', videoWithTime);
+    } catch (sqlErr) {
+      console.warn('SQL fallback upload notice for member video:', sqlErr);
     }
   };
 

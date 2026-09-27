@@ -20,8 +20,9 @@ import { AddPhotoModal } from '../components/AddPhotoModal';
 import { AdminPhotoAuthModal } from '../components/AdminPhotoAuthModal';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
+import { socket } from '../lib/socket';
 
 const LOCAL_STORAGE_KEY = '11star_tree_plantation_custom_photos';
 
@@ -34,7 +35,7 @@ export const TreePlantationPage: React.FC = () => {
   const [isDeleteAuthOpen, setIsDeleteAuthOpen] = useState(false);
   const [customPhotos, setCustomPhotos] = useState<TreePlantationPhotoItem[]>([]);
 
-  // Load custom photos on mount + Firestore real-time listener
+  // Load custom photos on mount + Firestore real-time listener + SQL + Sockets
   useEffect(() => {
     // 1. Initial persistent load
     loadPersistentItems<TreePlantationPhotoItem>(LOCAL_STORAGE_KEY).then((saved) => {
@@ -44,8 +45,9 @@ export const TreePlantationPage: React.FC = () => {
     });
 
     // 2. Real-time Firestore sync with merge
+    let unsub = () => {};
     try {
-      const unsub = onSnapshot(
+      unsub = onSnapshot(
         collection(db, 'treePlantationPhotos'),
         (snapshot) => {
           const cloudPhotos: TreePlantationPhotoItem[] = [];
@@ -57,16 +59,69 @@ export const TreePlantationPage: React.FC = () => {
             const merged = mergeItemsWithLocal(cloudPhotos, local);
             setCustomPhotos(merged);
             savePersistentItems(LOCAL_STORAGE_KEY, merged);
+
+            // --- SMART AUTO BACKGROUND RE-SYNC ---
+            // Find any local custom tree photos that are missing from the cloudPhotos list
+            const cloudIds = new Set(cloudPhotos.map(p => String(p.id)));
+            const localOnly = local.filter(p => p.isCustom && !cloudIds.has(String(p.id)));
+            
+            if (localOnly.length > 0) {
+              console.log(`[Auto-Sync] Found ${localOnly.length} local-only tree photos. Restoring...`);
+              localOnly.forEach(async (item) => {
+                try {
+                  await setDoc(doc(db, 'treePlantationPhotos', String(item.id)), item);
+                  await uploadToFallbackServer('tree_plantation_photo', item.title, item.subtitle || '', item);
+                  console.log(`[Auto-Sync] Successfully restored tree photo:`, item.id);
+                } catch (err) {
+                  console.warn('[Auto-Sync] Failed to restore tree photo:', item.id, err);
+                }
+              });
+            }
+            // -------------------------------------
           });
         },
         (err) => {
           console.warn('Firestore treePlantationPhotos snapshot notice:', err);
         }
       );
-      return () => unsub();
     } catch (e) {
       console.warn('Firestore sync fallback:', e);
     }
+
+    // 3. PostgreSQL Fallback
+    fetchFromFallbackServer<TreePlantationPhotoItem>('tree_plantation_photo').then((sqlPhotos) => {
+      if (sqlPhotos && sqlPhotos.length > 0) {
+        loadPersistentItems<TreePlantationPhotoItem>(LOCAL_STORAGE_KEY).then((local) => {
+          const merged = mergeItemsWithLocal(sqlPhotos, local);
+          setCustomPhotos(merged);
+          savePersistentItems(LOCAL_STORAGE_KEY, merged);
+        });
+      }
+    }).catch(err => console.warn('Tree photos SQL fallback load notice:', err));
+
+    // 4. WebSocket (Socket.IO) Real-time sync
+    const handleRemoteItem = (data: any) => {
+      if (data && data.category === 'tree_plantation_photo' && data.item) {
+        console.log('[WebSocket] Real-time tree photo received:', data.item);
+        setCustomPhotos((prev) => {
+          if (prev.some((p) => p.id === data.item.id)) return prev;
+          const updated = [data.item, ...prev];
+          savePersistentItems(LOCAL_STORAGE_KEY, updated);
+          return updated;
+        });
+      }
+    };
+
+    if (socket) {
+      socket.on('item_uploaded', handleRemoteItem);
+    }
+
+    return () => {
+      unsub();
+      if (socket) {
+        socket.off('item_uploaded', handleRemoteItem);
+      }
+    };
   }, []);
 
   const saveCustomPhotos = async (items: TreePlantationPhotoItem[]) => {
@@ -90,12 +145,19 @@ export const TreePlantationPage: React.FC = () => {
     const updated = [...formatted, ...current];
     await saveCustomPhotos(updated);
 
-    // Save to Firestore & Central Club Data Storage
+    // Save to Firestore & Central Club Data Storage & PostgreSQL Fallback
     for (const item of formatted) {
       try {
         await setDoc(doc(db, 'treePlantationPhotos', String(item.id)), item);
       } catch (err) {
         console.warn('Failed to save tree plantation photo to Firestore:', err);
+      }
+
+      // Save to PostgreSQL backup for guaranteed syncing
+      try {
+        await uploadToFallbackServer('tree_plantation_photo', item.title, item.subtitle || '', item);
+      } catch (sqlErr) {
+        console.warn('SQL fallback upload notice for tree photo:', sqlErr);
       }
 
       // Also save to Permanent Club Data Storage & File Manager

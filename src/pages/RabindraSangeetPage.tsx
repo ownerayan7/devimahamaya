@@ -16,7 +16,8 @@ import { broadcastMediaPlaybackStarted, registerHtmlMediaElement, subscribeToMed
 import { updateLockScreenMediaMetadata, pauseLockScreenMediaSession, clearLockScreenMediaMetadata } from '../utils/mediaSessionHelper';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
+import { socket } from '../lib/socket';
 
 const LOCAL_STORAGE_KEY = '11starclub_rabindra_songs_v1';
 
@@ -61,7 +62,7 @@ export const RabindraSangeetPage: React.FC = () => {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  // Firestore Real-Time Listener + persistent storage merge
+  // Firestore Real-Time Listener + persistent storage merge + Sockets + SQL
   useEffect(() => {
     // 1. Initial persistent load
     loadPersistentItems<RabindraSongItem>(LOCAL_STORAGE_KEY).then((saved) => {
@@ -72,8 +73,9 @@ export const RabindraSangeetPage: React.FC = () => {
     });
 
     // 2. Real-time Firestore sync with merge
+    let unsub = () => {};
     try {
-      const unsub = onSnapshot(
+      unsub = onSnapshot(
         collection(db, 'rabindraSongs'),
         (snapshot) => {
           const firestoreItems: RabindraSongItem[] = [];
@@ -91,16 +93,73 @@ export const RabindraSangeetPage: React.FC = () => {
             setSongs(merged);
             setActiveSong((prev) => prev ? (merged.find(s => s.id === prev.id) || merged[0] || null) : (merged[0] || null));
             savePersistentItems(LOCAL_STORAGE_KEY, merged);
+
+            // --- SMART AUTO BACKGROUND RE-SYNC ---
+            // Find any local custom rabindra songs that are missing from the firestoreItems list
+            const cloudIds = new Set(firestoreItems.map(s => String(s.id)));
+            const localOnly = local.filter(s => s.isCustom && !cloudIds.has(String(s.id)));
+            
+            if (localOnly.length > 0) {
+              console.log(`[Auto-Sync] Found ${localOnly.length} local-only rabindra songs. Restoring...`);
+              localOnly.forEach(async (item) => {
+                try {
+                  await setDoc(doc(db, 'rabindraSongs', String(item.id)), item);
+                  await uploadToFallbackServer('rabindra_song', item.title, item.description || '', item);
+                  console.log(`[Auto-Sync] Successfully restored rabindra song:`, item.id);
+                } catch (err) {
+                  console.warn('[Auto-Sync] Failed to restore rabindra song:', item.id, err);
+                }
+              });
+            }
+            // -------------------------------------
           });
         },
         (err) => {
           console.warn('Firestore rabindraSongs snapshot notice:', err);
         }
       );
-      return () => unsub();
     } catch (e) {
       console.warn('Firestore connection fallback:', e);
     }
+
+    // 3. PostgreSQL Fallback
+    fetchFromFallbackServer<RabindraSongItem>('rabindra_song').then((sqlSongs) => {
+      if (sqlSongs && sqlSongs.length > 0) {
+        loadPersistentItems<RabindraSongItem>(LOCAL_STORAGE_KEY).then((local) => {
+          const merged = mergeItemsWithLocal(sqlSongs, local);
+          merged.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+          setSongs(merged);
+          setActiveSong((prev) => prev ? (merged.find(s => s.id === prev.id) || merged[0] || null) : (merged[0] || null));
+          savePersistentItems(LOCAL_STORAGE_KEY, merged);
+        });
+      }
+    }).catch(err => console.warn('Rabindra songs SQL fallback load notice:', err));
+
+    // 4. WebSocket (Socket.IO) Real-time sync
+    const handleRemoteItem = (data: any) => {
+      if (data && data.category === 'rabindra_song' && data.item) {
+        console.log('[WebSocket] Real-time rabindra song received:', data.item);
+        loadPersistentItems<RabindraSongItem>(LOCAL_STORAGE_KEY).then((local) => {
+          if (local.some((s) => s.id === data.item.id)) return;
+          const updated = [data.item, ...local];
+          updated.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
+          setSongs(updated);
+          setActiveSong(data.item);
+          savePersistentItems(LOCAL_STORAGE_KEY, updated);
+        });
+      }
+    };
+
+    if (socket) {
+      socket.on('item_uploaded', handleRemoteItem);
+    }
+
+    return () => {
+      unsub();
+      if (socket) {
+        socket.off('item_uploaded', handleRemoteItem);
+      }
+    };
   }, []);
 
   // HTML5 Audio / Video coordination registration
@@ -149,6 +208,13 @@ export const RabindraSangeetPage: React.FC = () => {
       await setDoc(doc(db, 'rabindraSongs', newSong.id), newSong);
     } catch (err) {
       console.warn('Firestore add rabindra song warning:', err);
+    }
+
+    // Sync to PostgreSQL backup
+    try {
+      await uploadToFallbackServer('rabindra_song', newSong.title, newSong.description || '', newSong);
+    } catch (sqlErr) {
+      console.warn('SQL fallback upload notice for rabindra song:', sqlErr);
     }
   };
 

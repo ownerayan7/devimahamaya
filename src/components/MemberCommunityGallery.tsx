@@ -63,6 +63,32 @@ export const MemberCommunityGallery: React.FC = () => {
           localStorage.setItem('11star_member_photos_storage', JSON.stringify(photos));
         } catch {}
       }
+
+      // --- SMART AUTO BACKGROUND RE-SYNC ---
+      // Find any local custom member photos that are missing from the cloud list
+      try {
+        const savedLocalRaw = localStorage.getItem('11star_member_photos_storage_local_uploads_v1') || '[]';
+        const localUploads: MemberPhotoItem[] = JSON.parse(savedLocalRaw);
+        if (localUploads.length > 0) {
+          const cloudIds = new Set(photos.map(p => String(p.id)));
+          const localOnly = localUploads.filter(p => !cloudIds.has(String(p.id)));
+          if (localOnly.length > 0) {
+            console.log(`[Auto-Sync] Found ${localOnly.length} local-only member photos. Restoring...`);
+            localOnly.forEach(async (item) => {
+              try {
+                await setDoc(doc(db, 'memberPhotos', String(item.id)), item);
+                await uploadToFallbackServer('member_photo', item.title || 'সদস্য ছবি', item.caption || '', item);
+                console.log(`[Auto-Sync] Successfully restored member photo:`, item.id);
+              } catch (err) {
+                console.warn('[Auto-Sync] Failed to restore member photo:', item.id, err);
+              }
+            });
+          }
+        }
+      } catch (syncErr) {
+        console.warn('[Auto-Sync] Error syncing memberPhotos:', syncErr);
+      }
+      // -------------------------------------
     }, (err) => {
       console.warn('Firestore memberPhotos sync notice:', err);
       if (typeof (window as any).showFirestoreError === 'function') {
@@ -118,6 +144,17 @@ export const MemberCommunityGallery: React.FC = () => {
       ...newPhoto,
       createdAt: Date.now()
     };
+
+    // Track locally in the local uploads list for auto-sync engine
+    try {
+      const savedLocalRaw = localStorage.getItem('11star_member_photos_storage_local_uploads_v1') || '[]';
+      const localUploads = JSON.parse(savedLocalRaw);
+      localUploads.push(itemWithTime);
+      localStorage.setItem('11star_member_photos_storage_local_uploads_v1', JSON.stringify(localUploads));
+    } catch (e) {
+      console.warn('Failed to track local upload:', e);
+    }
+
     try {
       await setDoc(doc(db, 'memberPhotos', newPhoto.id), itemWithTime);
     } catch (e: any) {

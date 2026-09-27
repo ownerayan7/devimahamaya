@@ -64,8 +64,11 @@ export const AnnouncementCard: React.FC = () => {
         const merged = mergeItemsWithLocal(cloudNotices, local);
         merged.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
         setCustomNotices(merged);
+        
+        // Fix the jump-back/reset bug: Check if prev exists in either custom notices or static ANNOUNCEMENTS
+        const allAvailableIds = new Set([...merged.map(n => n.id), ...ANNOUNCEMENTS.map(n => n.id)]);
         if (merged.length > 0) {
-          setActiveNoticeId((prev) => merged.some(n => n.id === prev) ? prev : merged[0].id);
+          setActiveNoticeId((prev) => allAvailableIds.has(prev) ? prev : (merged[0]?.id || ANNOUNCEMENTS[0].id));
         }
         savePersistentItems(LOCAL_STORAGE_NOTICES_KEY, merged);
 
@@ -102,8 +105,11 @@ export const AnnouncementCard: React.FC = () => {
           const merged = mergeItemsWithLocal(sqlNotices, local);
           merged.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
           setCustomNotices(merged);
+          
+          // Fix the jump-back/reset bug: Check if prev exists in either custom notices or static ANNOUNCEMENTS
+          const allAvailableIds = new Set([...merged.map(n => n.id), ...ANNOUNCEMENTS.map(n => n.id)]);
           if (merged.length > 0) {
-            setActiveNoticeId((prev) => merged.some(n => n.id === prev) ? prev : merged[0].id);
+            setActiveNoticeId((prev) => allAvailableIds.has(prev) ? prev : (merged[0]?.id || ANNOUNCEMENTS[0].id));
           }
           savePersistentItems(LOCAL_STORAGE_NOTICES_KEY, merged);
         });
