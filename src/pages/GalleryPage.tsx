@@ -63,6 +63,25 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ onOpenAdminStorage }) 
         const merged = mergeItemsWithLocal(cloudPhotos, local);
         setCustomPhotos(merged);
         savePersistentItems(LOCAL_STORAGE_KEY, merged);
+
+        // --- SMART AUTO BACKGROUND RE-SYNC ---
+        // Find any local custom photos that are missing from the cloudPhotos list
+        const cloudIds = new Set(cloudPhotos.map(p => String(p.id)));
+        const localOnly = local.filter(p => p.isCustom && !cloudIds.has(String(p.id)));
+        
+        if (localOnly.length > 0) {
+          console.log(`[Auto-Sync] Found ${localOnly.length} local-only photos. Restoring to Firestore and SQL backend...`);
+          localOnly.forEach(async (item) => {
+            try {
+              await setDoc(doc(db, 'clubPhotos', String(item.id)), item);
+              await uploadToFallbackServer('gallery_photo', item.title, item.subtitle || '', item);
+              console.log(`[Auto-Sync] Successfully restored photo:`, item.id);
+            } catch (err) {
+              console.warn('[Auto-Sync] Failed to restore photo:', item.id, err);
+            }
+          });
+        }
+        // -------------------------------------
       });
     }, (err) => {
       console.warn('Firestore clubPhotos sync notice:', err);

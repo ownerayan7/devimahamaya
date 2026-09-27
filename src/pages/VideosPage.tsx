@@ -156,6 +156,25 @@ export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) =>
             if (!hasUserManuallySelectedRef.current && merged.length > 0) {
               handleSelectVideo(merged[0], false, false);
             }
+
+            // --- SMART AUTO BACKGROUND RE-SYNC ---
+            // Find any local custom videos that are missing from the firestoreList list
+            const cloudIds = new Set(firestoreList.map(v => String(v.id)));
+            const localOnly = local.filter(v => v.isCustom && !cloudIds.has(String(v.id)));
+            
+            if (localOnly.length > 0) {
+              console.log(`[Auto-Sync] Found ${localOnly.length} local-only videos. Restoring to Firestore and SQL backend...`);
+              localOnly.forEach(async (item) => {
+                try {
+                  await setDoc(doc(db, 'officialVideos', String(item.id)), item);
+                  await uploadToFallbackServer('official_video', item.title, item.description || '', item);
+                  console.log(`[Auto-Sync] Successfully restored video:`, item.id);
+                } catch (err) {
+                  console.warn('[Auto-Sync] Failed to restore video:', item.id, err);
+                }
+              });
+            }
+            // -------------------------------------
           });
         },
         (err) => {

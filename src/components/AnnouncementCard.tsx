@@ -68,6 +68,25 @@ export const AnnouncementCard: React.FC = () => {
           setActiveNoticeId((prev) => merged.some(n => n.id === prev) ? prev : merged[0].id);
         }
         savePersistentItems(LOCAL_STORAGE_NOTICES_KEY, merged);
+
+        // --- SMART AUTO BACKGROUND RE-SYNC ---
+        // Find any local custom notices that are missing from the cloudNotices list
+        const cloudIds = new Set(cloudNotices.map(n => String(n.id)));
+        const localOnly = local.filter(n => n.isCustom && !cloudIds.has(String(n.id)));
+        
+        if (localOnly.length > 0) {
+          console.log(`[Auto-Sync] Found ${localOnly.length} local-only notices. Restoring to Firestore and SQL backend...`);
+          localOnly.forEach(async (item) => {
+            try {
+              await setDoc(doc(db, 'announcements', String(item.id)), item);
+              await uploadToFallbackServer('announcement', item.title, item.content || '', item);
+              console.log(`[Auto-Sync] Successfully restored notice:`, item.id);
+            } catch (err) {
+              console.warn('[Auto-Sync] Failed to restore notice:', item.id, err);
+            }
+          });
+        }
+        // -------------------------------------
       });
     }, (err) => {
       console.warn('Firestore announcements listener notice:', err);

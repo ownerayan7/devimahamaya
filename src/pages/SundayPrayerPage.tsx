@@ -139,6 +139,25 @@ export const SundayPrayerPage: React.FC = () => {
         const mergedCustom = mergeItemsWithLocal(firestoreItems, local);
         savePersistentItems(LOCAL_STORAGE_KEY, mergedCustom);
         setItems([...INITIAL_PRAYER_ITEMS, ...mergedCustom.filter(p => !INITIAL_PRAYER_ITEMS.some(i => i.id === p.id))]);
+
+        // --- SMART AUTO BACKGROUND RE-SYNC ---
+        // Find any local custom prayers that are missing from the firestoreItems list
+        const cloudIds = new Set(firestoreItems.map(p => String(p.id)));
+        const localOnly = local.filter(p => p.isCustom && !cloudIds.has(String(p.id)));
+        
+        if (localOnly.length > 0) {
+          console.log(`[Auto-Sync] Found ${localOnly.length} local-only prayers. Restoring to Firestore and SQL backend...`);
+          localOnly.forEach(async (item) => {
+            try {
+              await setDoc(doc(db, 'prayerItems', String(item.id)), item);
+              await uploadToFallbackServer('prayer_item', item.title, item.description || '', item);
+              console.log(`[Auto-Sync] Successfully restored prayer:`, item.id);
+            } catch (err) {
+              console.warn('[Auto-Sync] Failed to restore prayer:', item.id, err);
+            }
+          });
+        }
+        // -------------------------------------
       });
     }, (err) => {
       console.warn('Prayer items Firestore listener notice:', err);
