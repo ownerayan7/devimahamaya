@@ -200,30 +200,18 @@ export const RadioPage: React.FC = () => {
     });
   };
 
+  const [currentActiveStreamUrl, setCurrentActiveStreamUrl] = useState<string>('');
+
   const handleStreamFallback = async (station: RadioStation) => {
-    if (!audioRef.current) return;
-    const audio = audioRef.current;
-    if (station.backupStreamUrl && audio.src !== station.backupStreamUrl) {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
-      audio.src = station.backupStreamUrl;
-      audio.load();
-      try {
-        await audio.play();
-        setIsPlaying(true);
-        setIsLoading(false);
-        updateMediaSession(station);
-        setErrorMsg('বিকল্প ব্যাকআপ সার্ভার ২ এ সুইচ করা হয়েছে।');
-        return;
-      } catch (err) {
-        console.warn('Backup stream failed:', err);
-      }
+    if (station.backupStreamUrl && currentActiveStreamUrl !== station.backupStreamUrl) {
+      console.log(`[Radio Player] Primary stream failed for ${station.bengaliName}. Automatically switching to Backup Server 2...`);
+      setErrorMsg('সার্ভার ১ সাড়া দিচ্ছে না। স্বয়ংক্রিয়ভাবে ব্যাকআপ সার্ভার ২ এ সুইচ করা হচ্ছে...');
+      handlePlay(station, station.backupStreamUrl);
+      return;
     }
     setIsLoading(false);
     setIsPlaying(false);
-    setErrorMsg('লাইভ স্ট্রিম সংযোগ করা সম্ভব হয়নি। অন্য স্টেশন নির্বাচন করুন অথবা "সার্ভার ২" এ ক্লিক করুন।');
+    setErrorMsg('লাইভ সম্প্রচার সংযোগ করা সম্ভব হয়নি। অনুগ্রহ করে অন্য স্টেশন বেছে নিন বা রিফ্রেশ করুন।');
   };
 
   const handlePlay = async (station: RadioStation, customStreamUrl?: string) => {
@@ -236,8 +224,10 @@ export const RadioPage: React.FC = () => {
     setSelectedStation(station);
     setIsLoading(true);
 
-    const audio = audioRef.current;
     const streamUrl = customStreamUrl || station.streamUrl;
+    setCurrentActiveStreamUrl(streamUrl);
+
+    const audio = audioRef.current;
     const isHls = streamUrl.includes('.m3u8') || streamUrl.includes('/hls') || streamUrl.includes('bitgravity');
 
     // Destroy any existing HLS instance
@@ -263,6 +253,11 @@ export const RadioPage: React.FC = () => {
             setIsPlaying(true);
             setIsLoading(false);
             updateMediaSession(station);
+            if (customStreamUrl === station.backupStreamUrl) {
+              setErrorMsg('লাইভ ব্যাকআপ সার্ভার ২ এ সংযোগ সফল হয়েছে! 🔴');
+            } else {
+              setErrorMsg(null);
+            }
           }).catch((err) => {
             console.warn('HLS play error:', err);
             handleStreamFallback(station);
@@ -287,6 +282,11 @@ export const RadioPage: React.FC = () => {
         setIsPlaying(true);
         setIsLoading(false);
         updateMediaSession(station);
+        if (customStreamUrl === station.backupStreamUrl) {
+          setErrorMsg('লাইভ ব্যাকআপ সার্ভার ২ এ সংযোগ সফল হয়েছে! 🔴');
+        } else {
+          setErrorMsg(null);
+        }
       } catch (e) {
         handleStreamFallback(station);
       }
@@ -298,6 +298,11 @@ export const RadioPage: React.FC = () => {
         setIsPlaying(true);
         setIsLoading(false);
         updateMediaSession(station);
+        if (customStreamUrl === station.backupStreamUrl) {
+          setErrorMsg('লাইভ ব্যাকআপ সার্ভার ২ এ সংযোগ সফল হয়েছে! 🔴');
+        } else {
+          setErrorMsg(null);
+        }
       } catch (e) {
         handleStreamFallback(station);
       }

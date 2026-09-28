@@ -23,6 +23,7 @@ import { extractDriveFileId, getDriveDirectImageUrl } from '../utils/driveHelper
 import { sendAppNotification } from '../utils/notificationHelper';
 import { saveVideoBlob, generateVideoThumbnail } from '../utils/videoStorageHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
+import { convertFileToDataUrl } from '../utils/fileConverter';
 
 interface AddPrayerItemModalProps {
   isOpen: boolean;
@@ -125,17 +126,24 @@ export const AddPrayerItemModal: React.FC<AddPrayerItemModalProps> = ({
       }
     } else {
       // Local File upload
-      if (!filePreview || !selectedFile) {
+      if (!selectedFile) {
         setError('অনুগ্রহ করে ফাইল নির্বাচন করুন।');
         return;
       }
-      mediaUrl = filePreview;
-      embedUrl = filePreview;
+      setIsSubmitting(true);
+      try {
+        const dataUrl = await convertFileToDataUrl(selectedFile);
+        mediaUrl = dataUrl;
+        embedUrl = dataUrl;
+      } catch (err) {
+        mediaUrl = filePreview;
+        embedUrl = filePreview;
+      }
       thumbnailUrl = '';
       mediaSource = 'local';
     }
 
-    setIsSubmitting(true);
+    if (!isSubmitting) setIsSubmitting(true);
 
     const itemId = `prayer-item-${Date.now()}`;
 

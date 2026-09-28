@@ -22,6 +22,7 @@ import { VideoItem } from '../types';
 import { extractYouTubeId, getYouTubeThumbnail, formatYouTubeWatchUrl } from '../utils/youtubeHelper';
 import { generateVideoThumbnail, saveVideoBlob } from '../utils/videoStorageHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
+import { convertFileToDataUrl } from '../utils/fileConverter';
 
 interface AddOfficialVideoModalProps {
   isOpen: boolean;
@@ -186,8 +187,13 @@ export const AddOfficialVideoModal: React.FC<AddOfficialVideoModalProps> = ({
 
       const videoId = `custom-video-local-${Date.now()}`;
 
-      // Save binary blob to IndexedDB for persistent in-browser playback
+      let finalVideoUrl = videoFilePreview;
       if (videoFile) {
+        try {
+          finalVideoUrl = await convertFileToDataUrl(videoFile);
+        } catch (storageErr) {
+          console.warn('Could not convert video to Data URL:', storageErr);
+        }
         try {
           await saveVideoBlob(videoId, videoFile);
         } catch (storageErr) {
@@ -200,7 +206,7 @@ export const AddOfficialVideoModal: React.FC<AddOfficialVideoModalProps> = ({
         title: title.trim(),
         description: description.trim() || '11 স্টার ক্লাবের অফিসিয়াল গ্যালারি ভিডিও সংকলন।',
         videoType: 'local',
-        videoFileUrl: videoFilePreview,
+        videoFileUrl: finalVideoUrl,
         thumbnailUrl: thumbnailPreview,
         category,
         duration: duration.trim() || 'গ্যালারি ভিডিও',

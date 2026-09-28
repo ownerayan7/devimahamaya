@@ -23,6 +23,7 @@ import { MemberVideoItem } from '../types';
 import { extractYouTubeId, getYouTubeThumbnail, formatYouTubeWatchUrl } from '../utils/youtubeHelper';
 import { generateVideoThumbnail, saveVideoBlob } from '../utils/videoStorageHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
+import { convertFileToDataUrl } from '../utils/fileConverter';
 
 interface MemberVideoUploadModalProps {
   isOpen: boolean;
@@ -189,7 +190,13 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
 
       const videoId = `member-video-local-${Date.now()}`;
 
+      let finalVideoUrl = videoFilePreview;
       if (videoFile) {
+        try {
+          finalVideoUrl = await convertFileToDataUrl(videoFile);
+        } catch (storageErr) {
+          console.warn('Could not convert member video to Data URL:', storageErr);
+        }
         try {
           await saveVideoBlob(videoId, videoFile);
         } catch (storageErr) {
@@ -206,7 +213,7 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
         youtubeId: 'local-member-video',
         youtubeUrl: '',
         videoType: 'local',
-        videoFileUrl: videoFilePreview,
+        videoFileUrl: finalVideoUrl,
         thumbnailUrl: thumbnailPreview,
         category,
         duration: duration.trim() || 'গ্যালারি ভিডিও',

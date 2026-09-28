@@ -79,13 +79,16 @@ export const CustomPrayerCard: React.FC<CustomPrayerCardProps> = ({
   }
 
   const isDirectVideo =
-    item.mediaSource === 'local' ||
-    mediaSrc.startsWith('blob:') ||
-    mediaSrc.startsWith('data:video') ||
-    embedSrc.startsWith('blob:') ||
-    mediaSrc.includes('.mp4') ||
-    mediaSrc.includes('.webm') ||
-    mediaSrc.includes('.mov');
+    item.type === 'video' &&
+    (item.mediaSource === 'local' ||
+      mediaSrc.startsWith('data:') ||
+      mediaSrc.startsWith('blob:') ||
+      embedSrc.startsWith('data:') ||
+      embedSrc.startsWith('blob:') ||
+      mediaSrc.includes('.mp4') ||
+      mediaSrc.includes('.webm') ||
+      mediaSrc.includes('.mov') ||
+      (!mediaSrc.includes('youtube.com') && !mediaSrc.includes('youtu.be') && !mediaSrc.includes('facebook.com')));
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
