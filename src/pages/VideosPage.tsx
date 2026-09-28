@@ -148,33 +148,54 @@ export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) =>
           });
 
           loadPersistentItems<VideoItem>(LOCAL_STORAGE_KEY).then((local) => {
-            const merged = mergeItemsWithLocal(firestoreList, local);
-            merged.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
-            setCustomVideos(merged);
-            savePersistentItems(LOCAL_STORAGE_KEY, merged);
+            const cloudIds = new Set(firestoreList.map(v => String(v.id)));
 
-            if (!hasUserManuallySelectedRef.current && merged.length > 0) {
-              handleSelectVideo(merged[0], false, false);
+            // --- SAFE DELETION DETECTION ---
+            // If an item has synced: true but is missing from cloud, it was DELETED by an admin.
+            // We MUST discard it from local storage so it does not reappear!
+            const filteredLocal = local.filter((item) => {
+              if (item.isCustom && (item as any).synced === true && !cloudIds.has(String(item.id))) {
+                console.log(`[Sync] Detected deletion of video: ${item.id}. Removing from local cache.`);
+                return false;
+              }
+              return true;
+            });
+
+            const merged = mergeItemsWithLocal(firestoreList, filteredLocal);
+            merged.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
+
+            // Mark any item successfully in cloud as synced: true
+            const finalLocalWithSyncFlags = merged.map((item) => {
+              if (cloudIds.has(String(item.id))) {
+                return { ...item, synced: true };
+              }
+              return item;
+            });
+
+            setCustomVideos(finalLocalWithSyncFlags);
+            savePersistentItems(LOCAL_STORAGE_KEY, finalLocalWithSyncFlags);
+
+            if (!hasUserManuallySelectedRef.current && finalLocalWithSyncFlags.length > 0) {
+              handleSelectVideo(finalLocalWithSyncFlags[0], false, false);
             }
 
             // --- SMART AUTO BACKGROUND RE-SYNC ---
-            // Find any local custom videos that are missing from the firestoreList list
-            const cloudIds = new Set(firestoreList.map(v => String(v.id)));
-            const localOnly = local.filter(v => v.isCustom && !cloudIds.has(String(v.id)));
+            // Only upload items that have never been synced (synced is false or undefined)
+            const localOnlyToUpload = finalLocalWithSyncFlags.filter(v => v.isCustom && !(v as any).synced);
             
-            if (localOnly.length > 0) {
-              console.log(`[Auto-Sync] Found ${localOnly.length} local-only videos. Restoring to Firestore and SQL backend...`);
-              localOnly.forEach(async (item) => {
+            if (localOnlyToUpload.length > 0) {
+              console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced videos. Restoring...`);
+              localOnlyToUpload.forEach(async (item) => {
                 try {
-                  await setDoc(doc(db, 'officialVideos', String(item.id)), item);
-                  await uploadToFallbackServer('official_video', item.title, item.description || '', item);
-                  console.log(`[Auto-Sync] Successfully restored video:`, item.id);
+                  const updatedItem = { ...item, synced: true };
+                  await setDoc(doc(db, 'officialVideos', String(item.id)), updatedItem);
+                  await uploadToFallbackServer('official_video', item.title, item.description || '', updatedItem);
+                  console.log(`[Auto-Sync] Restored video:`, item.id);
                 } catch (err) {
                   console.warn('[Auto-Sync] Failed to restore video:', item.id, err);
                 }
               });
             }
-            // -------------------------------------
           });
         },
         (err) => {
@@ -270,7 +291,8 @@ export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) =>
   const handleAddOfficialVideo = async (newVideo: VideoItem) => {
     const videoWithTime: VideoItem = {
       ...newVideo,
-      createdAt: newVideo.createdAt || Date.now()
+      createdAt: newVideo.createdAt || Date.now(),
+      synced: false
     };
     const updated = [videoWithTime, ...customVideos.filter((v) => v.id !== videoWithTime.id)];
     updated.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));

@@ -135,6 +135,7 @@ export interface VideoItem {
   tag?: string;
   isCustom?: boolean;
   createdAt?: number;
+  synced?: boolean;
 }
 
 export interface MemberVideoItem {

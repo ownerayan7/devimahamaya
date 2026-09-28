@@ -215,7 +215,7 @@ export const RadioPage: React.FC = () => {
         setIsPlaying(true);
         setIsLoading(false);
         updateMediaSession(station);
-        setErrorMsg('ব্যাকআপ স্ট্রিমে পরিবর্তিত হয়েছে।');
+        setErrorMsg('বিকল্প ব্যাকআপ সার্ভার ২ এ সুইচ করা হয়েছে।');
         return;
       } catch (err) {
         console.warn('Backup stream failed:', err);
@@ -223,17 +223,12 @@ export const RadioPage: React.FC = () => {
     }
     setIsLoading(false);
     setIsPlaying(false);
-    setErrorMsg('লাইভ স্ট্রিম সংযোগ করা সম্ভব হয়নি। পুনরায় ক্লিক করুন।');
+    setErrorMsg('লাইভ স্ট্রিম সংযোগ করা সম্ভব হয়নি। অন্য স্টেশন নির্বাচন করুন অথবা "সার্ভার ২" এ ক্লিক করুন।');
   };
 
-  const handlePlay = async (station: RadioStation) => {
+  const handlePlay = async (station: RadioStation, customStreamUrl?: string) => {
     if (!audioRef.current) return;
     setErrorMsg(null);
-
-    // If already playing this station, do nothing
-    if (selectedStation.id === station.id && isPlaying) {
-      return;
-    }
 
     // Stop other global app media
     broadcastMediaPlaybackStarted('indian-radio-player', 'radio');
@@ -242,7 +237,7 @@ export const RadioPage: React.FC = () => {
     setIsLoading(true);
 
     const audio = audioRef.current;
-    const streamUrl = station.streamUrl;
+    const streamUrl = customStreamUrl || station.streamUrl;
     const isHls = streamUrl.includes('.m3u8') || streamUrl.includes('/hls') || streamUrl.includes('bitgravity');
 
     // Destroy any existing HLS instance
@@ -256,7 +251,8 @@ export const RadioPage: React.FC = () => {
         const hls = new Hls({
           enableWorker: true,
           lowLatencyMode: true,
-          backBufferLength: 60
+          backBufferLength: 60,
+          maxBufferLength: 30
         });
         hlsRef.current = hls;
         hls.loadSource(streamUrl);
@@ -587,7 +583,7 @@ export const RadioPage: React.FC = () => {
         )}
 
         {/* Status Bar */}
-        <div className="p-3 sm:p-4 rounded-2xl bg-black/60 border border-amber-500/20 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs">
+        <div className="p-3 sm:p-4 rounded-2xl bg-black/60 border border-amber-500/20 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs">
           <div className="flex items-center gap-2 text-stone-300">
             <RadioTower className="w-4 h-4 text-amber-400 shrink-0" />
             <span>
@@ -601,9 +597,27 @@ export const RadioPage: React.FC = () => {
             </span>
           </div>
 
-          <div className="flex items-center gap-2 text-amber-300/80 font-mono text-[11px]">
-            <Signal className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-            <span>HQ AUDIO STREAM</span>
+          <div className="flex flex-wrap items-center gap-2">
+            {selectedStation.backupStreamUrl && (
+              <div className="flex items-center gap-1.5 bg-black/40 p-1 rounded-xl border border-white/10">
+                <button
+                  onClick={() => handlePlay(selectedStation, selectedStation.streamUrl)}
+                  className="px-2.5 py-1 rounded-lg bg-amber-500/20 hover:bg-amber-500/35 border border-amber-400/40 text-amber-200 text-[11px] font-bold transition-all active:scale-95"
+                >
+                  সার্ভার ১ (Primary)
+                </button>
+                <button
+                  onClick={() => handlePlay(selectedStation, selectedStation.backupStreamUrl)}
+                  className="px-2.5 py-1 rounded-lg bg-blue-500/20 hover:bg-blue-500/35 border border-blue-400/40 text-blue-200 text-[11px] font-bold transition-all active:scale-95"
+                >
+                  সার্ভার ২ (Backup)
+                </button>
+              </div>
+            )}
+            <div className="flex items-center gap-1.5 text-amber-300/80 font-mono text-[11px] px-2 py-1 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <Signal className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+              <span>HQ AUDIO</span>
+            </div>
           </div>
         </div>
       </section>

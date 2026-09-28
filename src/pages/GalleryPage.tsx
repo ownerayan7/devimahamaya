@@ -60,28 +60,49 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ onOpenAdminStorage }) 
       });
 
       loadPersistentItems<GalleryPhotoItem>(LOCAL_STORAGE_KEY).then((local) => {
-        const merged = mergeItemsWithLocal(cloudPhotos, local);
-        setCustomPhotos(merged);
-        savePersistentItems(LOCAL_STORAGE_KEY, merged);
+        const cloudIds = new Set(cloudPhotos.map(p => String(p.id)));
+
+        // --- SAFE DELETION DETECTION ---
+        // If an item has synced: true but is missing from cloud, it was DELETED by an admin.
+        // We MUST discard it from local storage so it does not reappear!
+        const filteredLocal = local.filter((item) => {
+          if (item.isCustom && (item as any).synced === true && !cloudIds.has(String(item.id))) {
+            console.log(`[Sync] Detected deletion of photo: ${item.id}. Removing from local cache.`);
+            return false;
+          }
+          return true;
+        });
+
+        const merged = mergeItemsWithLocal(cloudPhotos, filteredLocal);
+
+        // Mark any item successfully in cloud as synced: true
+        const finalLocalWithSyncFlags = merged.map((item) => {
+          if (cloudIds.has(String(item.id))) {
+            return { ...item, synced: true };
+          }
+          return item;
+        });
+
+        setCustomPhotos(finalLocalWithSyncFlags);
+        savePersistentItems(LOCAL_STORAGE_KEY, finalLocalWithSyncFlags);
 
         // --- SMART AUTO BACKGROUND RE-SYNC ---
-        // Find any local custom photos that are missing from the cloudPhotos list
-        const cloudIds = new Set(cloudPhotos.map(p => String(p.id)));
-        const localOnly = local.filter(p => p.isCustom && !cloudIds.has(String(p.id)));
+        // Only upload items that have never been synced (synced is false or undefined)
+        const localOnlyToUpload = finalLocalWithSyncFlags.filter(p => p.isCustom && !(p as any).synced);
         
-        if (localOnly.length > 0) {
-          console.log(`[Auto-Sync] Found ${localOnly.length} local-only photos. Restoring to Firestore and SQL backend...`);
-          localOnly.forEach(async (item) => {
+        if (localOnlyToUpload.length > 0) {
+          console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced photos. Restoring...`);
+          localOnlyToUpload.forEach(async (item) => {
             try {
-              await setDoc(doc(db, 'clubPhotos', String(item.id)), item);
-              await uploadToFallbackServer('gallery_photo', item.title, item.subtitle || '', item);
+              const updatedItem = { ...item, synced: true };
+              await setDoc(doc(db, 'clubPhotos', String(item.id)), updatedItem);
+              await uploadToFallbackServer('gallery_photo', item.title, item.subtitle || '', updatedItem);
               console.log(`[Auto-Sync] Successfully restored photo:`, item.id);
             } catch (err) {
               console.warn('[Auto-Sync] Failed to restore photo:', item.id, err);
             }
           });
         }
-        // -------------------------------------
       });
     }, (err) => {
       console.warn('Firestore clubPhotos sync notice:', err);
@@ -130,7 +151,8 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ onOpenAdminStorage }) 
     const formatted: GalleryPhotoItem[] = newItems.map((item) => ({
       ...item,
       isCustom: true,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      synced: false
     }));
     const current = await loadPersistentItems<GalleryPhotoItem>(LOCAL_STORAGE_KEY);
     const updated = [...formatted, ...current];
