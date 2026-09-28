@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { getDriveDirectImageUrl, extractDriveFileId } from '../utils/driveHelper';
 import { optimizeImage } from '../utils/imageOptimizer';
+import { getAppStorage } from '../lib/firebase';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 interface AddPhotoModalProps {
@@ -54,6 +55,7 @@ export const AddPhotoModal: React.FC<AddPhotoModalProps> = ({
   const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; dataUrl: string }>>([]);
   const [errorMsg, setErrorMsg] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   if (!isOpen) return null;
 
@@ -159,43 +161,66 @@ export const AddPhotoModal: React.FC<AddPhotoModalProps> = ({
         return;
       }
 
-      const newItems = uploadedFiles.map((fileObj, idx) => {
-        const autoId = `upload-custom-${Date.now()}-${idx}`;
-        const itemTitle = title.trim()
-          ? (uploadedFiles.length > 1 ? `${title.trim()} (${idx + 1})` : title.trim())
-          : (fileObj.name.replace(/\.[^/.]+$/, '') || `আপলোড ছবি (${idx + 1})`);
+      setIsUploading(true);
 
-        return {
-          id: autoId,
-          title: itemTitle,
-          subtitle: subtitle.trim() || 'সরাসরি আপলোড করা আলোকচিত্র',
-          category: category,
-          url: fileObj.dataUrl,
-          tag: tag.trim() || 'আপলোড ছবি',
-          year: '২০২৬',
-        };
-      });
+      const processUploads = async () => {
+        const appStorage = getAppStorage();
+        const newItems = await Promise.all(
+          uploadedFiles.map(async (fileObj, idx) => {
+            const autoId = `upload-custom-${Date.now()}-${idx}`;
+            const itemTitle = title.trim()
+              ? (uploadedFiles.length > 1 ? `${title.trim()} (${idx + 1})` : title.trim())
+              : (fileObj.name.replace(/\.[^/.]+$/, '') || `আপলোড ছবি (${idx + 1})`);
 
-      onAddPhotos(newItems);
+            let finalUrl = fileObj.dataUrl;
 
-      // Persist to Permanent Storage
-      newItems.forEach(item => {
-        saveClubStoredItem({
-          title: item.title,
-          type: 'photo',
-          source: 'device',
-          url: item.url,
-          authorName: 'অ্যাডমিন (আপলোড)',
-          description: item.subtitle,
-          category: item.category
-        }).catch(console.warn);
-      });
+            if (appStorage) {
+              try {
+                const { ref, uploadString, getDownloadURL } = await import('firebase/storage');
+                const storageRef = ref(appStorage, `galleryPhotos/${Date.now()}_${idx}_${fileObj.name.replace(/\.[^/.]+$/, '')}.webp`);
+                const snap = await uploadString(storageRef, fileObj.dataUrl, 'data_url');
+                finalUrl = await getDownloadURL(snap.ref);
+              } catch (storageErr) {
+                console.warn('Firebase Storage upload notice for photo, falling back to dataUrl:', storageErr);
+              }
+            }
 
-      setSuccessMsg(`${newItems.length}টি ছবি সফলভাবে পেজে ও স্থায়ী স্টোরেজে যুক্ত করা হয়েছে!`);
-      setTimeout(() => {
-        onClose();
-        resetForm();
-      }, 1000);
+            return {
+              id: autoId,
+              title: itemTitle,
+              subtitle: subtitle.trim() || 'সরাসরি আপলোড করা আলোকচিত্র',
+              category: category,
+              url: finalUrl,
+              tag: tag.trim() || 'আপলোড ছবি',
+              year: '২০২৬',
+            };
+          })
+        );
+
+        onAddPhotos(newItems);
+
+        // Persist to Permanent Storage
+        newItems.forEach(item => {
+          saveClubStoredItem({
+            title: item.title,
+            type: 'photo',
+            source: 'device',
+            url: item.url,
+            authorName: 'অ্যাডমিন (আপলোড)',
+            description: item.subtitle,
+            category: item.category
+          }).catch(console.warn);
+        });
+
+        setSuccessMsg(`${newItems.length}টি ছবি সফলভাবে পেজে ও স্থায়ী ক্লাউড স্টোরেজে যুক্ত করা হয়েছে!`);
+        setTimeout(() => {
+          setIsUploading(false);
+          onClose();
+          resetForm();
+        }, 1000);
+      };
+
+      processUploads();
     }
   };
 

@@ -37,6 +37,7 @@ export interface PrayerItem {
   scheduledTime?: string; // e.g., '৭:০০ PM'
   isCustom?: boolean;
   synced?: boolean;
+  createdAt?: number;
 }
 
 export interface RabindraSongItem {
@@ -68,6 +69,7 @@ export interface Announcement {
   driveFolderTitle?: string;
   isCustom?: boolean;
   synced?: boolean;
+  createdAt?: number;
 }
 
 export interface PujaScheduleItem {

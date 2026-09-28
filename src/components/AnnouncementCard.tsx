@@ -87,10 +87,20 @@ export const AnnouncementCard: React.FC = () => {
 
         setCustomNotices(finalLocalWithSyncFlags);
         
-        // Fix the jump-back/reset bug: Check if prev exists in either custom notices or static ANNOUNCEMENTS
+        // Fix notice focus: Focus on newest notice if available
         const allAvailableIds = new Set([...finalLocalWithSyncFlags.map(n => n.id), ...ANNOUNCEMENTS.map(n => n.id)]);
         if (finalLocalWithSyncFlags.length > 0) {
-          setActiveNoticeId((prev) => allAvailableIds.has(prev) ? prev : (finalLocalWithSyncFlags[0]?.id || ANNOUNCEMENTS[0].id));
+          setActiveNoticeId((prev) => {
+            if (!prev) return finalLocalWithSyncFlags[0].id;
+            const isPrevValid = allAvailableIds.has(prev);
+            if (!isPrevValid) return finalLocalWithSyncFlags[0].id;
+            const newestId = finalLocalWithSyncFlags[0].id;
+            // If the newest notice was created in the last 5 minutes, auto-select it!
+            if (newestId && newestId !== prev && ((finalLocalWithSyncFlags[0] as any).createdAt || 0) > Date.now() - 300000) {
+              return newestId;
+            }
+            return prev;
+          });
         }
         savePersistentItems(LOCAL_STORAGE_NOTICES_KEY, finalLocalWithSyncFlags);
 

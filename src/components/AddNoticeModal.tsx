@@ -16,6 +16,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { Announcement } from '../types';
+import { getAppStorage } from '../lib/firebase';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 interface AddNoticeModalProps {
@@ -71,7 +72,7 @@ export const AddNoticeModal: React.FC<AddNoticeModalProps> = ({
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
 
@@ -87,17 +88,33 @@ export const AddNoticeModal: React.FC<AddNoticeModalProps> = ({
 
     setIsSubmitting(true);
 
+    let finalImageUrl = imagePreview || '';
+    if (imagePreview && imagePreview.startsWith('data:')) {
+      const appStorage = getAppStorage();
+      if (appStorage) {
+        try {
+          const { ref, uploadString, getDownloadURL } = await import('firebase/storage');
+          const storageRef = ref(appStorage, `notices/${Date.now()}_notice.webp`);
+          const snap = await uploadString(storageRef, imagePreview, 'data_url');
+          finalImageUrl = await getDownloadURL(snap.ref);
+        } catch (storageErr) {
+          console.warn('Firebase Storage upload notice for notice image, falling back to dataUrl:', storageErr);
+        }
+      }
+    }
+
     const newNotice: Announcement = {
       id: `notice-${Date.now()}`,
       title: title.trim(),
       content: content.trim(),
       tag: tag.trim() || 'জরুরি নোটিশ',
       date: date.trim() || 'আজকের নোটিশ',
-      image: imagePreview || undefined,
+      image: finalImageUrl || undefined,
       driveFolderUrl: driveUrl.trim() || undefined,
       driveFolderTitle: driveUrl.trim() ? 'গুগল ড্রাইভ নোটিশ নথি দেখুন' : undefined,
       isImportant: true,
-      isCustom: true
+      isCustom: true,
+      createdAt: Date.now()
     };
 
     onAddNotice(newNotice);

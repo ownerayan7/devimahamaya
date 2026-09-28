@@ -223,9 +223,10 @@ export const RabindraSangeetPage: React.FC = () => {
   const handleAddSong = async (newSong: RabindraSongItem) => {
     const songWithTime = {
       ...newSong,
+      createdAt: Date.now(),
       synced: false
     };
-    const updated = [songWithTime, ...songs];
+    const updated = [songWithTime, ...songs.filter(s => s.id !== songWithTime.id)];
     setSongs(updated);
     setActiveSong(songWithTime);
     await savePersistentItems(LOCAL_STORAGE_KEY, updated);

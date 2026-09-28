@@ -424,15 +424,22 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
 
           {/* Player Media Container */}
           <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black border border-emerald-500/30 shadow-inner flex items-center justify-center">
-            {selectedVideo.videoType === 'local' && selectedFileUrl ? (
-              <video
-                ref={localVideoRef}
-                key={selectedFileUrl}
-                src={selectedFileUrl}
-                controls
-                playsInline
-                className="w-full h-full object-contain bg-black"
-              />
+            {selectedVideo.videoType === 'local' || selectedVideo.youtubeId === 'local-member-video' || selectedVideo.id.startsWith('member-') || selectedVideo.id.startsWith('custom-') ? (
+              selectedFileUrl || selectedVideo.videoFileUrl ? (
+                <video
+                  ref={localVideoRef}
+                  key={selectedFileUrl || selectedVideo.videoFileUrl}
+                  src={selectedFileUrl || selectedVideo.videoFileUrl}
+                  controls
+                  playsInline
+                  className="w-full h-full object-contain bg-black"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center p-6 text-center space-y-2 text-emerald-300">
+                  <Users className="w-10 h-10 text-emerald-400 animate-pulse" />
+                  <p className="text-sm font-bold font-serif-bengali">সদস্যের গ্যালারি ভিডিও প্লে হচ্ছে...</p>
+                </div>
+              )
             ) : (
               <iframe
                 key={selectedVideo.youtubeId || selectedVideo.id}

@@ -151,6 +151,7 @@ export const SundayPrayerPage: React.FC = () => {
         });
 
         const mergedCustom = mergeItemsWithLocal(firestoreItems, filteredLocal);
+        mergedCustom.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
         // Mark any item that is successfully in cloud as synced: true
         const finalLocalWithSyncFlags = mergedCustom.map((item) => {
@@ -161,7 +162,7 @@ export const SundayPrayerPage: React.FC = () => {
         });
 
         savePersistentItems(LOCAL_STORAGE_KEY, finalLocalWithSyncFlags);
-        setItems([...INITIAL_PRAYER_ITEMS, ...finalLocalWithSyncFlags.filter(p => !INITIAL_PRAYER_ITEMS.some(i => i.id === p.id))]);
+        setItems([...finalLocalWithSyncFlags, ...INITIAL_PRAYER_ITEMS.filter(i => !finalLocalWithSyncFlags.some(m => m.id === i.id))]);
 
         // --- SMART AUTO BACKGROUND RE-SYNC ---
         // Only upload items that have never been synced (synced is false or undefined)
@@ -283,7 +284,7 @@ export const SundayPrayerPage: React.FC = () => {
       createdAt: Date.now(),
       synced: false
     } as any;
-    const updated = [...items, itemWithTime];
+    const updated = [itemWithTime, ...items.filter(i => i.id !== itemWithTime.id)];
     setItems(updated);
     const customItems = updated.filter((i) => i.isCustom);
     await savePersistentItems(LOCAL_STORAGE_KEY, customItems);

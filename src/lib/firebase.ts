@@ -41,7 +41,7 @@ let _storageInstance: FirebaseStorage | null = null;
 export function getAppStorage(): FirebaseStorage | null {
   if (!_storageInstance) {
     try {
-      _storageInstance = getStorage(app);
+      _storageInstance = getStorage(app, firebaseConfig.storageBucket || "starclub-b2ab9.firebasestorage.app");
     } catch (e) {
       console.warn('Storage service notice:', e);
       return null;

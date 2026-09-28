@@ -21,6 +21,7 @@ import {
 import { VideoItem } from '../types';
 import { extractYouTubeId, getYouTubeThumbnail, formatYouTubeWatchUrl } from '../utils/youtubeHelper';
 import { generateVideoThumbnail, saveVideoBlob } from '../utils/videoStorageHelper';
+import { getAppStorage } from '../lib/firebase';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 import { convertFileToDataUrl } from '../utils/fileConverter';
 
@@ -189,11 +190,31 @@ export const AddOfficialVideoModal: React.FC<AddOfficialVideoModalProps> = ({
 
       let finalVideoUrl = videoFilePreview;
       if (videoFile) {
-        try {
-          finalVideoUrl = await convertFileToDataUrl(videoFile);
-        } catch (storageErr) {
-          console.warn('Could not convert video to Data URL:', storageErr);
+        // Upload file to Firebase Storage for universal cloud URL accessible on all devices
+        const appStorage = getAppStorage();
+        if (appStorage) {
+          try {
+            const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
+            const ext = videoFile.name.split('.').pop() || 'mp4';
+            const storageRef = ref(appStorage, `officialVideos/${Date.now()}_${videoFile.name.replace(/\.[^/.]+$/, '')}.${ext}`);
+            const snap = await uploadBytes(storageRef, videoFile);
+            finalVideoUrl = await getDownloadURL(snap.ref);
+          } catch (storageErr) {
+            console.warn('Firebase Storage upload notice, falling back to Data URL:', storageErr);
+            try {
+              finalVideoUrl = await convertFileToDataUrl(videoFile);
+            } catch (convErr) {
+              console.warn('Could not convert video to Data URL:', convErr);
+            }
+          }
+        } else {
+          try {
+            finalVideoUrl = await convertFileToDataUrl(videoFile);
+          } catch (storageErr) {
+            console.warn('Could not convert video to Data URL:', storageErr);
+          }
         }
+
         try {
           await saveVideoBlob(videoId, videoFile);
         } catch (storageErr) {
