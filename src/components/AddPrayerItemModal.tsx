@@ -22,7 +22,7 @@ import { extractYouTubeId, getYouTubeThumbnail } from '../utils/youtubeHelper';
 import { extractDriveFileId, getDriveDirectImageUrl } from '../utils/driveHelper';
 import { sendAppNotification } from '../utils/notificationHelper';
 import { saveVideoBlob, generateVideoThumbnail } from '../utils/videoStorageHelper';
-import { getAppStorage } from '../lib/firebase';
+import { uploadMediaFile } from '../utils/uploadHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 import { convertFileToDataUrl } from '../utils/fileConverter';
 
@@ -132,35 +132,10 @@ export const AddPrayerItemModal: React.FC<AddPrayerItemModalProps> = ({
         return;
       }
       setIsSubmitting(true);
-      let cloudUrl = '';
 
-      // Upload file to Firebase Storage for universal cloud URL accessible on all devices
-      const appStorage = getAppStorage();
-      if (appStorage && selectedFile) {
-        try {
-          const { ref, uploadBytes, getDownloadURL } = await import('firebase/storage');
-          const ext = selectedFile.name.split('.').pop() || (mediaType === 'video' ? 'mp4' : 'mp3');
-          const storageRef = ref(appStorage, `prayerMedia/${Date.now()}_${selectedFile.name.replace(/\.[^/.]+$/, '')}.${ext}`);
-          const snap = await uploadBytes(storageRef, selectedFile);
-          cloudUrl = await getDownloadURL(snap.ref);
-        } catch (storageErr) {
-          console.warn('Firebase Storage upload notice, falling back to Data URL:', storageErr);
-        }
-      }
-
-      if (cloudUrl) {
-        mediaUrl = cloudUrl;
-        embedUrl = cloudUrl;
-      } else {
-        try {
-          const dataUrl = await convertFileToDataUrl(selectedFile);
-          mediaUrl = dataUrl;
-          embedUrl = dataUrl;
-        } catch (err) {
-          mediaUrl = filePreview;
-          embedUrl = filePreview;
-        }
-      }
+      const uploadedUrl = await uploadMediaFile(selectedFile, 'prayerMedia');
+      mediaUrl = uploadedUrl || filePreview;
+      embedUrl = uploadedUrl || filePreview;
       thumbnailUrl = '';
       mediaSource = 'local';
     }

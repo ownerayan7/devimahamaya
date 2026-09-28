@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { getDriveDirectImageUrl, extractDriveFileId } from '../utils/driveHelper';
 import { optimizeImage } from '../utils/imageOptimizer';
-import { getAppStorage } from '../lib/firebase';
+import { uploadMediaFile } from '../utils/uploadHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 interface AddPhotoModalProps {
@@ -164,7 +164,6 @@ export const AddPhotoModal: React.FC<AddPhotoModalProps> = ({
       setIsUploading(true);
 
       const processUploads = async () => {
-        const appStorage = getAppStorage();
         const newItems = await Promise.all(
           uploadedFiles.map(async (fileObj, idx) => {
             const autoId = `upload-custom-${Date.now()}-${idx}`;
@@ -173,16 +172,15 @@ export const AddPhotoModal: React.FC<AddPhotoModalProps> = ({
               : (fileObj.name.replace(/\.[^/.]+$/, '') || `আপলোড ছবি (${idx + 1})`);
 
             let finalUrl = fileObj.dataUrl;
-
-            if (appStorage) {
-              try {
-                const { ref, uploadString, getDownloadURL } = await import('firebase/storage');
-                const storageRef = ref(appStorage, `galleryPhotos/${Date.now()}_${idx}_${fileObj.name.replace(/\.[^/.]+$/, '')}.webp`);
-                const snap = await uploadString(storageRef, fileObj.dataUrl, 'data_url');
-                finalUrl = await getDownloadURL(snap.ref);
-              } catch (storageErr) {
-                console.warn('Firebase Storage upload notice for photo, falling back to dataUrl:', storageErr);
-              }
+            try {
+              // Convert dataUrl back to Blob File to upload to cloud/server
+              const res = await fetch(fileObj.dataUrl);
+              const blob = await res.blob();
+              const photoFile = new File([blob], fileObj.name || `photo_${idx}.jpg`, { type: blob.type || 'image/jpeg' });
+              const uploadedUrl = await uploadMediaFile(photoFile, 'galleryPhotos');
+              if (uploadedUrl) finalUrl = uploadedUrl;
+            } catch {
+              // Fallback to dataUrl
             }
 
             return {

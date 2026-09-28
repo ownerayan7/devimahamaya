@@ -16,7 +16,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { Announcement } from '../types';
-import { getAppStorage } from '../lib/firebase';
+import { uploadMediaFile } from '../utils/uploadHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 interface AddNoticeModalProps {
@@ -39,6 +39,7 @@ export const AddNoticeModal: React.FC<AddNoticeModalProps> = ({
     return today.toLocaleDateString('bn-BD', options);
   });
   const [imagePreview, setImagePreview] = useState<string>('');
+  const [selectedNoticeFile, setSelectedNoticeFile] = useState<File | null>(null);
   const [driveUrl, setDriveUrl] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -57,6 +58,7 @@ export const AddNoticeModal: React.FC<AddNoticeModalProps> = ({
       return;
     }
 
+    setSelectedNoticeFile(file);
     const reader = new FileReader();
     reader.onload = () => {
       setImagePreview(reader.result as string);
@@ -67,6 +69,7 @@ export const AddNoticeModal: React.FC<AddNoticeModalProps> = ({
 
   const handleRemoveImage = () => {
     setImagePreview('');
+    setSelectedNoticeFile(null);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -89,18 +92,9 @@ export const AddNoticeModal: React.FC<AddNoticeModalProps> = ({
     setIsSubmitting(true);
 
     let finalImageUrl = imagePreview || '';
-    if (imagePreview && imagePreview.startsWith('data:')) {
-      const appStorage = getAppStorage();
-      if (appStorage) {
-        try {
-          const { ref, uploadString, getDownloadURL } = await import('firebase/storage');
-          const storageRef = ref(appStorage, `notices/${Date.now()}_notice.webp`);
-          const snap = await uploadString(storageRef, imagePreview, 'data_url');
-          finalImageUrl = await getDownloadURL(snap.ref);
-        } catch (storageErr) {
-          console.warn('Firebase Storage upload notice for notice image, falling back to dataUrl:', storageErr);
-        }
-      }
+    if (selectedNoticeFile) {
+      const uploadedUrl = await uploadMediaFile(selectedNoticeFile, 'notices');
+      finalImageUrl = uploadedUrl || imagePreview;
     }
 
     const newNotice: Announcement = {

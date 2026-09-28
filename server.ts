@@ -49,7 +49,15 @@ io.on('connection', (socket) => {
 });
 
 app.use(cors());
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '100mb' }));
+app.use(express.urlencoded({ limit: '100mb', extended: true }));
+
+// Ensure uploads directory exists
+const uploadsDir = path.join(__dirname, 'public', 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+app.use('/uploads', express.static(uploadsDir));
 
 // Initialize GoogleGenAI SDK
 const ai = new GoogleGenAI({
@@ -434,6 +442,34 @@ app.delete('/api/sync-logs/:id', async (req, res) => {
   } catch (error: any) {
     console.error('Error deleting sync log:', error);
     res.status(500).json({ error: error.message || 'Failed to delete sync log' });
+  }
+});
+
+// Media Upload Endpoint for local server storage
+app.post('/api/upload-media', async (req, res) => {
+  try {
+    const { filename, fileData } = req.body;
+    if (!fileData) {
+      return res.status(400).json({ error: 'No file data provided' });
+    }
+
+    const base64Data = fileData.replace(/^data:[^;]+;base64,/, '');
+    const ext = filename ? filename.split('.').pop() : 'bin';
+    const cleanName = (filename || 'file').replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeFilename = `${Date.now()}_${cleanName}.${ext}`;
+    const filePath = path.join(uploadsDir, safeFilename);
+
+    await fs.promises.writeFile(filePath, Buffer.from(base64Data, 'base64'));
+
+    const host = req.get('host') || 'localhost:3000';
+    const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+    const publicUrl = `${protocol}://${host}/uploads/${safeFilename}`;
+
+    console.log(`[Media Upload] Successfully saved media file: ${safeFilename} -> ${publicUrl}`);
+    return res.json({ success: true, url: publicUrl, filename: safeFilename });
+  } catch (err: any) {
+    console.error('[Media Upload Error]', err);
+    return res.status(500).json({ error: err.message || 'Failed to save upload' });
   }
 });
 
