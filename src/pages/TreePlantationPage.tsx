@@ -23,6 +23,7 @@ import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firesto
 import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 import { socket } from '../lib/socket';
+import { sendAppNotification } from '../utils/notificationHelper';
 
 const LOCAL_STORAGE_KEY = '11star_tree_plantation_custom_photos';
 
@@ -56,21 +57,43 @@ export const TreePlantationPage: React.FC = () => {
           });
 
           loadPersistentItems<TreePlantationPhotoItem>(LOCAL_STORAGE_KEY).then((local) => {
-            const merged = mergeItemsWithLocal(cloudPhotos, local);
-            setCustomPhotos(merged);
-            savePersistentItems(LOCAL_STORAGE_KEY, merged);
+            const cloudIds = new Set(cloudPhotos.map(p => String(p.id)));
+
+            // --- SAFE DELETION DETECTION ---
+            // If an item has synced: true but is missing from cloud, it was DELETED by an admin.
+            // We MUST discard it from local storage so it does not reappear!
+            const filteredLocal = local.filter((item) => {
+              if (item.isCustom && (item as any).synced === true && !cloudIds.has(String(item.id))) {
+                console.log(`[Sync] Detected deletion of tree photo: ${item.id}. Removing from local cache.`);
+                return false;
+              }
+              return true;
+            });
+
+            const merged = mergeItemsWithLocal(cloudPhotos, filteredLocal);
+
+            // Mark any item successfully in cloud as synced: true
+            const finalLocalWithSyncFlags = merged.map((item) => {
+              if (cloudIds.has(String(item.id))) {
+                return { ...item, synced: true };
+              }
+              return item;
+            });
+
+            setCustomPhotos(finalLocalWithSyncFlags);
+            savePersistentItems(LOCAL_STORAGE_KEY, finalLocalWithSyncFlags);
 
             // --- SMART AUTO BACKGROUND RE-SYNC ---
-            // Find any local custom tree photos that are missing from the cloudPhotos list
-            const cloudIds = new Set(cloudPhotos.map(p => String(p.id)));
-            const localOnly = local.filter(p => p.isCustom && !cloudIds.has(String(p.id)));
+            // Only upload items that have never been synced (synced is false or undefined)
+            const localOnlyToUpload = finalLocalWithSyncFlags.filter(p => p.isCustom && !(p as any).synced);
             
-            if (localOnly.length > 0) {
-              console.log(`[Auto-Sync] Found ${localOnly.length} local-only tree photos. Restoring...`);
-              localOnly.forEach(async (item) => {
+            if (localOnlyToUpload.length > 0) {
+              console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced tree photos. Restoring...`);
+              localOnlyToUpload.forEach(async (item) => {
                 try {
-                  await setDoc(doc(db, 'treePlantationPhotos', String(item.id)), item);
-                  await uploadToFallbackServer('tree_plantation_photo', item.title, item.subtitle || '', item);
+                  const updatedItem = { ...item, synced: true };
+                  await setDoc(doc(db, 'treePlantationPhotos', String(item.id)), updatedItem);
+                  await uploadToFallbackServer('tree_plantation_photo', item.title, item.subtitle || '', updatedItem);
                   console.log(`[Auto-Sync] Successfully restored tree photo:`, item.id);
                 } catch (err) {
                   console.warn('[Auto-Sync] Failed to restore tree photo:', item.id, err);
@@ -139,7 +162,8 @@ export const TreePlantationPage: React.FC = () => {
       ...item,
       isCustom: true,
       year: item.year || '২০২৬',
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      synced: false
     }));
     const current = await loadPersistentItems<TreePlantationPhotoItem>(LOCAL_STORAGE_KEY);
     const updated = [...formatted, ...current];
@@ -173,6 +197,18 @@ export const TreePlantationPage: React.FC = () => {
         });
       } catch (err) {
         console.warn('Failed to save tree photo to Club Storage:', err);
+      }
+
+      // Send app notification
+      try {
+        await sendAppNotification(
+          'নতুন বৃক্ষরোপণ ছবি যুক্ত হয়েছে!',
+          `বৃক্ষরোপণ কর্মসূচি পেজে নতুন ছবি "${item.title}" যুক্ত করা হয়েছে।`,
+          'media',
+          'tree-plantation'
+        );
+      } catch (notifErr) {
+        console.warn('Failed to send tree notification:', notifErr);
       }
     }
   };

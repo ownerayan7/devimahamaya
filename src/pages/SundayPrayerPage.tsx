@@ -29,6 +29,7 @@ import { db } from '../lib/firebase';
 import { doc, onSnapshot, setDoc, collection, addDoc, deleteDoc } from 'firebase/firestore';
 import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
 import { socket } from '../lib/socket';
+import { sendAppNotification } from '../utils/notificationHelper';
 
 const INITIAL_PRAYER_ITEMS: PrayerItem[] = [
   {
@@ -136,22 +137,44 @@ export const SundayPrayerPage: React.FC = () => {
       });
 
       loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((local) => {
-        const mergedCustom = mergeItemsWithLocal(firestoreItems, local);
-        savePersistentItems(LOCAL_STORAGE_KEY, mergedCustom);
-        setItems([...INITIAL_PRAYER_ITEMS, ...mergedCustom.filter(p => !INITIAL_PRAYER_ITEMS.some(i => i.id === p.id))]);
+        const cloudIds = new Set(firestoreItems.map(p => String(p.id)));
+
+        // --- SAFE DELETION DETECTION ---
+        // If an item has synced: true but is missing from cloud, it was DELETED by an admin.
+        // We MUST discard it from local storage so it does not reappear!
+        const filteredLocal = local.filter((item) => {
+          if (item.isCustom && item.synced === true && !cloudIds.has(String(item.id))) {
+            console.log(`[Sync] Detected deletion of prayer item: ${item.id}. Removing from local cache.`);
+            return false;
+          }
+          return true;
+        });
+
+        const mergedCustom = mergeItemsWithLocal(firestoreItems, filteredLocal);
+
+        // Mark any item that is successfully in cloud as synced: true
+        const finalLocalWithSyncFlags = mergedCustom.map((item) => {
+          if (cloudIds.has(String(item.id))) {
+            return { ...item, synced: true };
+          }
+          return item;
+        });
+
+        savePersistentItems(LOCAL_STORAGE_KEY, finalLocalWithSyncFlags);
+        setItems([...INITIAL_PRAYER_ITEMS, ...finalLocalWithSyncFlags.filter(p => !INITIAL_PRAYER_ITEMS.some(i => i.id === p.id))]);
 
         // --- SMART AUTO BACKGROUND RE-SYNC ---
-        // Find any local custom prayers that are missing from the firestoreItems list
-        const cloudIds = new Set(firestoreItems.map(p => String(p.id)));
-        const localOnly = local.filter(p => p.isCustom && !cloudIds.has(String(p.id)));
+        // Only upload items that have never been synced (synced is false or undefined)
+        const localOnlyToUpload = finalLocalWithSyncFlags.filter(p => p.isCustom && !p.synced);
         
-        if (localOnly.length > 0) {
-          console.log(`[Auto-Sync] Found ${localOnly.length} local-only prayers. Restoring to Firestore and SQL backend...`);
-          localOnly.forEach(async (item) => {
+        if (localOnlyToUpload.length > 0) {
+          console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced prayers. Restoring...`);
+          localOnlyToUpload.forEach(async (item) => {
             try {
-              await setDoc(doc(db, 'prayerItems', String(item.id)), item);
-              await uploadToFallbackServer('prayer_item', item.title, item.description || '', item);
-              console.log(`[Auto-Sync] Successfully restored prayer:`, item.id);
+              const updatedItem = { ...item, synced: true };
+              await setDoc(doc(db, 'prayerItems', String(item.id)), updatedItem);
+              await uploadToFallbackServer('prayer_item', item.title, item.description || '', updatedItem);
+              console.log(`[Auto-Sync] Restored prayer:`, item.id);
             } catch (err) {
               console.warn('[Auto-Sync] Failed to restore prayer:', item.id, err);
             }
@@ -257,7 +280,8 @@ export const SundayPrayerPage: React.FC = () => {
   const handleAddPrayerItem = async (newItem: PrayerItem) => {
     const itemWithTime: PrayerItem = {
       ...newItem,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      synced: false
     } as any;
     const updated = [...items, itemWithTime];
     setItems(updated);
@@ -278,6 +302,18 @@ export const SundayPrayerPage: React.FC = () => {
       await uploadToFallbackServer('prayer_item', itemWithTime.title, itemWithTime.description || '', itemWithTime);
     } catch (sqlErr) {
       console.warn('SQL fallback upload notice for prayer item:', sqlErr);
+    }
+
+    // Dispatch global app notification
+    try {
+      await sendAppNotification(
+        'নতুন সান্ধ্য প্রার্থনা যুক্ত হয়েছে!',
+        `প্রার্থনা পেজে "${itemWithTime.title}" যুক্ত করা হয়েছে। এখনই দেখে নিন!`,
+        'prayer',
+        'prayer'
+      );
+    } catch (notifErr) {
+      console.warn('Failed to send prayer notification:', notifErr);
     }
   };
 

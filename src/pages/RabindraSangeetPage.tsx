@@ -18,6 +18,7 @@ import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
 import { socket } from '../lib/socket';
+import { sendAppNotification } from '../utils/notificationHelper';
 
 const LOCAL_STORAGE_KEY = '11starclub_rabindra_songs_v1';
 
@@ -88,23 +89,45 @@ export const RabindraSangeetPage: React.FC = () => {
           });
 
           loadPersistentItems<RabindraSongItem>(LOCAL_STORAGE_KEY).then((local) => {
-            const merged = mergeItemsWithLocal(firestoreItems, local);
+            const cloudIds = new Set(firestoreItems.map(s => String(s.id)));
+
+            // --- SAFE DELETION DETECTION ---
+            // If an item has synced: true but is missing from cloud, it was DELETED by an admin.
+            // We MUST discard it from local storage so it does not reappear!
+            const filteredLocal = local.filter((item) => {
+              if (item.isCustom && (item as any).synced === true && !cloudIds.has(String(item.id))) {
+                console.log(`[Sync] Detected deletion of rabindra song: ${item.id}. Removing from local cache.`);
+                return false;
+              }
+              return true;
+            });
+
+            const merged = mergeItemsWithLocal(firestoreItems, filteredLocal);
             merged.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
-            setSongs(merged);
-            setActiveSong((prev) => prev ? (merged.find(s => s.id === prev.id) || merged[0] || null) : (merged[0] || null));
-            savePersistentItems(LOCAL_STORAGE_KEY, merged);
+
+            // Mark any item successfully in cloud as synced: true
+            const finalLocalWithSyncFlags = merged.map((item) => {
+              if (cloudIds.has(String(item.id))) {
+                return { ...item, synced: true };
+              }
+              return item;
+            });
+
+            setSongs(finalLocalWithSyncFlags);
+            setActiveSong((prev) => prev ? (finalLocalWithSyncFlags.find(s => s.id === prev.id) || finalLocalWithSyncFlags[0] || null) : (finalLocalWithSyncFlags[0] || null));
+            savePersistentItems(LOCAL_STORAGE_KEY, finalLocalWithSyncFlags);
 
             // --- SMART AUTO BACKGROUND RE-SYNC ---
-            // Find any local custom rabindra songs that are missing from the firestoreItems list
-            const cloudIds = new Set(firestoreItems.map(s => String(s.id)));
-            const localOnly = local.filter(s => s.isCustom && !cloudIds.has(String(s.id)));
+            // Only upload items that have never been synced (synced is false or undefined)
+            const localOnlyToUpload = finalLocalWithSyncFlags.filter(s => s.isCustom && !(s as any).synced);
             
-            if (localOnly.length > 0) {
-              console.log(`[Auto-Sync] Found ${localOnly.length} local-only rabindra songs. Restoring...`);
-              localOnly.forEach(async (item) => {
+            if (localOnlyToUpload.length > 0) {
+              console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced rabindra songs. Restoring...`);
+              localOnlyToUpload.forEach(async (item) => {
                 try {
-                  await setDoc(doc(db, 'rabindraSongs', String(item.id)), item);
-                  await uploadToFallbackServer('rabindra_song', item.title, item.description || '', item);
+                  const updatedItem = { ...item, synced: true };
+                  await setDoc(doc(db, 'rabindraSongs', String(item.id)), updatedItem);
+                  await uploadToFallbackServer('rabindra_song', item.title, item.description || '', updatedItem);
                   console.log(`[Auto-Sync] Successfully restored rabindra song:`, item.id);
                 } catch (err) {
                   console.warn('[Auto-Sync] Failed to restore rabindra song:', item.id, err);
@@ -198,23 +221,39 @@ export const RabindraSangeetPage: React.FC = () => {
   };
 
   const handleAddSong = async (newSong: RabindraSongItem) => {
-    const updated = [newSong, ...songs];
+    const songWithTime = {
+      ...newSong,
+      synced: false
+    };
+    const updated = [songWithTime, ...songs];
     setSongs(updated);
-    setActiveSong(newSong);
+    setActiveSong(songWithTime);
     await savePersistentItems(LOCAL_STORAGE_KEY, updated);
 
     // Sync to Firestore
     try {
-      await setDoc(doc(db, 'rabindraSongs', newSong.id), newSong);
+      await setDoc(doc(db, 'rabindraSongs', songWithTime.id), songWithTime);
     } catch (err) {
       console.warn('Firestore add rabindra song warning:', err);
     }
 
     // Sync to PostgreSQL backup
     try {
-      await uploadToFallbackServer('rabindra_song', newSong.title, newSong.description || '', newSong);
+      await uploadToFallbackServer('rabindra_song', songWithTime.title, songWithTime.description || '', songWithTime);
     } catch (sqlErr) {
       console.warn('SQL fallback upload notice for rabindra song:', sqlErr);
+    }
+
+    // Send app notification
+    try {
+      await sendAppNotification(
+        'নতুন রবীন্দ্র সঙ্গীত যুক্ত হয়েছে!',
+        `রবীন্দ্র সঙ্গীত পেজে "${songWithTime.title}" গানটি যুক্ত করা হয়েছে। এখনই শুনুন!`,
+        'music',
+        'rabindra-sangeet'
+      );
+    } catch (notifErr) {
+      console.warn('Failed to send rabindra sangeet notification:', notifErr);
     }
   };
 

@@ -36,6 +36,7 @@ export interface PrayerItem {
   dateAdded?: string;
   scheduledTime?: string; // e.g., '৭:০০ PM'
   isCustom?: boolean;
+  synced?: boolean;
 }
 
 export interface RabindraSongItem {
@@ -52,6 +53,7 @@ export interface RabindraSongItem {
   description?: string;
   lyrics?: string;
   isCustom?: boolean;
+  synced?: boolean;
 }
 
 export interface Announcement {
@@ -65,6 +67,7 @@ export interface Announcement {
   driveFolderUrl?: string;
   driveFolderTitle?: string;
   isCustom?: boolean;
+  synced?: boolean;
 }
 
 export interface PujaScheduleItem {
@@ -152,6 +155,7 @@ export interface MemberVideoItem {
   likes?: number;
   isCustom?: boolean;
   createdAt?: number;
+  synced?: boolean;
 }
 
 export interface ActivityTimelineItem {
@@ -172,6 +176,7 @@ export interface GalleryPhotoItem {
   tag: string;
   isCustom?: boolean;
   createdAt?: number;
+  synced?: boolean;
 }
 
 export interface TreePlantationPhotoItem {
@@ -183,6 +188,7 @@ export interface TreePlantationPhotoItem {
   tag: string;
   year: string;
   isCustom?: boolean;
+  synced?: boolean;
 }
 
 export interface MemberPhotoItem {
@@ -198,6 +204,7 @@ export interface MemberPhotoItem {
   dateAdded?: string;
   likes?: number;
   isCustom?: boolean;
+  synced?: boolean;
 }
 
 export interface GyanSaradaChannel {

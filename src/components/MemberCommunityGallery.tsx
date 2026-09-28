@@ -71,13 +71,37 @@ export const MemberCommunityGallery: React.FC = () => {
         const localUploads: MemberPhotoItem[] = JSON.parse(savedLocalRaw);
         if (localUploads.length > 0) {
           const cloudIds = new Set(photos.map(p => String(p.id)));
-          const localOnly = localUploads.filter(p => !cloudIds.has(String(p.id)));
-          if (localOnly.length > 0) {
-            console.log(`[Auto-Sync] Found ${localOnly.length} local-only member photos. Restoring...`);
-            localOnly.forEach(async (item) => {
+
+          // --- SAFE DELETION DETECTION ---
+          // If an item in localUploads has synced: true but is missing from cloud, it was DELETED.
+          // So we discard it from localUploads so it does not reappear!
+          const filteredLocal = localUploads.filter((item) => {
+            if ((item as any).synced === true && !cloudIds.has(String(item.id))) {
+              console.log(`[Sync] Detected deletion of member photo: ${item.id}. Removing from local uploads.`);
+              return false;
+            }
+            return true;
+          });
+
+          // Mark any item successfully in cloud as synced: true
+          const updatedLocalWithSyncFlags = filteredLocal.map((item) => {
+            if (cloudIds.has(String(item.id))) {
+              return { ...item, synced: true };
+            }
+            return item;
+          });
+
+          localStorage.setItem('11star_member_photos_storage_local_uploads_v1', JSON.stringify(updatedLocalWithSyncFlags));
+
+          // --- SMART AUTO BACKGROUND RE-SYNC ---
+          const localOnlyToUpload = updatedLocalWithSyncFlags.filter(p => !p.synced);
+          if (localOnlyToUpload.length > 0) {
+            console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced member photos. Restoring...`);
+            localOnlyToUpload.forEach(async (item) => {
               try {
-                await setDoc(doc(db, 'memberPhotos', String(item.id)), item);
-                await uploadToFallbackServer('member_photo', item.title || 'সদস্য ছবি', item.caption || '', item);
+                const updatedItem = { ...item, synced: true };
+                await setDoc(doc(db, 'memberPhotos', String(item.id)), updatedItem);
+                await uploadToFallbackServer('member_photo', item.title || 'সদস্য ছবি', item.caption || '', updatedItem);
                 console.log(`[Auto-Sync] Successfully restored member photo:`, item.id);
               } catch (err) {
                 console.warn('[Auto-Sync] Failed to restore member photo:', item.id, err);
@@ -149,7 +173,7 @@ export const MemberCommunityGallery: React.FC = () => {
     try {
       const savedLocalRaw = localStorage.getItem('11star_member_photos_storage_local_uploads_v1') || '[]';
       const localUploads = JSON.parse(savedLocalRaw);
-      localUploads.push(itemWithTime);
+      localUploads.push({ ...itemWithTime, synced: false });
       localStorage.setItem('11star_member_photos_storage_local_uploads_v1', JSON.stringify(localUploads));
     } catch (e) {
       console.warn('Failed to track local upload:', e);

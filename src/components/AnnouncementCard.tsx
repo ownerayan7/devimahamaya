@@ -61,29 +61,51 @@ export const AnnouncementCard: React.FC = () => {
       });
 
       loadPersistentItems<Announcement>(LOCAL_STORAGE_NOTICES_KEY).then((local) => {
-        const merged = mergeItemsWithLocal(cloudNotices, local);
+        const cloudIds = new Set(cloudNotices.map(n => String(n.id)));
+
+        // --- SAFE DELETION DETECTION ---
+        // If an item has synced: true but is missing from cloud, it was DELETED by an admin.
+        // We MUST discard it from local storage so it does not reappear!
+        const filteredLocal = local.filter((item) => {
+          if (item.isCustom && (item as any).synced === true && !cloudIds.has(String(item.id))) {
+            console.log(`[Sync] Detected deletion of notice item: ${item.id}. Removing from local cache.`);
+            return false;
+          }
+          return true;
+        });
+
+        const merged = mergeItemsWithLocal(cloudNotices, filteredLocal);
         merged.sort((a: any, b: any) => (b.createdAt || 0) - (a.createdAt || 0));
-        setCustomNotices(merged);
+
+        // Mark any item successfully in cloud as synced: true
+        const finalLocalWithSyncFlags = merged.map((item) => {
+          if (cloudIds.has(String(item.id))) {
+            return { ...item, synced: true };
+          }
+          return item;
+        });
+
+        setCustomNotices(finalLocalWithSyncFlags);
         
         // Fix the jump-back/reset bug: Check if prev exists in either custom notices or static ANNOUNCEMENTS
-        const allAvailableIds = new Set([...merged.map(n => n.id), ...ANNOUNCEMENTS.map(n => n.id)]);
-        if (merged.length > 0) {
-          setActiveNoticeId((prev) => allAvailableIds.has(prev) ? prev : (merged[0]?.id || ANNOUNCEMENTS[0].id));
+        const allAvailableIds = new Set([...finalLocalWithSyncFlags.map(n => n.id), ...ANNOUNCEMENTS.map(n => n.id)]);
+        if (finalLocalWithSyncFlags.length > 0) {
+          setActiveNoticeId((prev) => allAvailableIds.has(prev) ? prev : (finalLocalWithSyncFlags[0]?.id || ANNOUNCEMENTS[0].id));
         }
-        savePersistentItems(LOCAL_STORAGE_NOTICES_KEY, merged);
+        savePersistentItems(LOCAL_STORAGE_NOTICES_KEY, finalLocalWithSyncFlags);
 
         // --- SMART AUTO BACKGROUND RE-SYNC ---
-        // Find any local custom notices that are missing from the cloudNotices list
-        const cloudIds = new Set(cloudNotices.map(n => String(n.id)));
-        const localOnly = local.filter(n => n.isCustom && !cloudIds.has(String(n.id)));
+        // Only upload items that have never been synced (synced is false or undefined)
+        const localOnlyToUpload = finalLocalWithSyncFlags.filter(n => n.isCustom && !(n as any).synced);
         
-        if (localOnly.length > 0) {
-          console.log(`[Auto-Sync] Found ${localOnly.length} local-only notices. Restoring to Firestore and SQL backend...`);
-          localOnly.forEach(async (item) => {
+        if (localOnlyToUpload.length > 0) {
+          console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced notices. Restoring...`);
+          localOnlyToUpload.forEach(async (item) => {
             try {
-              await setDoc(doc(db, 'announcements', String(item.id)), item);
-              await uploadToFallbackServer('announcement', item.title, item.content || '', item);
-              console.log(`[Auto-Sync] Successfully restored notice:`, item.id);
+              const updatedItem = { ...item, synced: true };
+              await setDoc(doc(db, 'announcements', String(item.id)), updatedItem);
+              await uploadToFallbackServer('announcement', item.title, item.content || '', updatedItem);
+              console.log(`[Auto-Sync] Restored notice:`, item.id);
             } catch (err) {
               console.warn('[Auto-Sync] Failed to restore notice:', item.id, err);
             }
@@ -156,7 +178,8 @@ export const AnnouncementCard: React.FC = () => {
   const handleAddNotice = async (newNotice: Announcement) => {
     const itemWithTime = {
       ...newNotice,
-      createdAt: Date.now()
+      createdAt: Date.now(),
+      synced: false
     };
     const updated = [itemWithTime, ...customNotices];
     saveCustomNotices(updated);
