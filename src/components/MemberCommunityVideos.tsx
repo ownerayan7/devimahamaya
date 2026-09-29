@@ -274,6 +274,10 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
       console.warn('SQL fallback upload notice for member video:', sqlErr);
     }
 
+    if (socket) {
+      socket.emit('upload_item', { category: 'member_video', item: videoWithTime });
+    }
+
     // Send app notification
     try {
       await sendAppNotification(

@@ -199,6 +199,10 @@ export const TreePlantationPage: React.FC = () => {
         console.warn('Failed to save tree photo to Club Storage:', err);
       }
 
+      if (socket) {
+        socket.emit('upload_item', { category: 'tree_plantation_photo', item });
+      }
+
       // Send app notification
       try {
         await sendAppNotification(

@@ -124,7 +124,7 @@ export const SundayPrayerPage: React.FC = () => {
     // 1. Initial persistent load
     loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((saved) => {
       if (saved && saved.length > 0) {
-        setItems([...INITIAL_PRAYER_ITEMS, ...saved.filter((p: PrayerItem) => !INITIAL_PRAYER_ITEMS.some(i => i.id === p.id))]);
+        setItems([...saved, ...INITIAL_PRAYER_ITEMS.filter((i: PrayerItem) => !saved.some(p => p.id === i.id))]);
       }
     });
 
@@ -196,7 +196,7 @@ export const SundayPrayerPage: React.FC = () => {
         loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((local) => {
           const mergedCustom = mergeItemsWithLocal(sqlPrayers, local);
           savePersistentItems(LOCAL_STORAGE_KEY, mergedCustom);
-          setItems([...INITIAL_PRAYER_ITEMS, ...mergedCustom.filter(p => !INITIAL_PRAYER_ITEMS.some(i => i.id === p.id))]);
+          setItems([...mergedCustom, ...INITIAL_PRAYER_ITEMS.filter(p => !mergedCustom.some(i => i.id === p.id))]);
         });
       }
     }).catch(err => console.warn('Prayers SQL fallback load notice:', err));
@@ -209,7 +209,7 @@ export const SundayPrayerPage: React.FC = () => {
           if (local.some((p) => p.id === data.item.id)) return;
           const updatedCustom = [data.item, ...local];
           savePersistentItems(LOCAL_STORAGE_KEY, updatedCustom);
-          setItems([...INITIAL_PRAYER_ITEMS, ...updatedCustom.filter(p => !INITIAL_PRAYER_ITEMS.some(i => i.id === p.id))]);
+          setItems([...updatedCustom, ...INITIAL_PRAYER_ITEMS.filter(p => !updatedCustom.some(i => i.id === p.id))]);
         });
       }
     };
@@ -303,6 +303,10 @@ export const SundayPrayerPage: React.FC = () => {
       await uploadToFallbackServer('prayer_item', itemWithTime.title, itemWithTime.description || '', itemWithTime);
     } catch (sqlErr) {
       console.warn('SQL fallback upload notice for prayer item:', sqlErr);
+    }
+
+    if (socket) {
+      socket.emit('upload_item', { category: 'prayer_item', item: itemWithTime });
     }
 
     // Dispatch global app notification

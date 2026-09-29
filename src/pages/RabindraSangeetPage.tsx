@@ -245,6 +245,10 @@ export const RabindraSangeetPage: React.FC = () => {
       console.warn('SQL fallback upload notice for rabindra song:', sqlErr);
     }
 
+    if (socket) {
+      socket.emit('upload_item', { category: 'rabindra_song', item: songWithTime });
+    }
+
     // Send app notification
     try {
       await sendAppNotification(

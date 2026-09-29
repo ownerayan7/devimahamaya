@@ -323,6 +323,10 @@ export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) =>
       console.warn('SQL fallback upload notice for official video:', sqlErr);
     }
 
+    if (socket) {
+      socket.emit('upload_item', { category: 'official_video', item: videoWithTime });
+    }
+
     // Send notification
     try {
       await sendAppNotification(

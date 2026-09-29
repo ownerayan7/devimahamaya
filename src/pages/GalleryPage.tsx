@@ -177,6 +177,9 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ onOpenAdminStorage }) 
       } catch (sqlErr) {
         console.warn('SQL fallback upload notice for photo:', sqlErr);
       }
+      if (socket) {
+        socket.emit('upload_item', { category: 'gallery_photo', item });
+      }
     }
     
     // Send notification

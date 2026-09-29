@@ -87,20 +87,9 @@ export const AnnouncementCard: React.FC = () => {
 
         setCustomNotices(finalLocalWithSyncFlags);
         
-        // Fix notice focus: Focus on newest notice if available
-        const allAvailableIds = new Set([...finalLocalWithSyncFlags.map(n => n.id), ...ANNOUNCEMENTS.map(n => n.id)]);
+        // Auto focus newest custom notice whenever items arrive so new notices are immediately shown on all devices
         if (finalLocalWithSyncFlags.length > 0) {
-          setActiveNoticeId((prev) => {
-            if (!prev) return finalLocalWithSyncFlags[0].id;
-            const isPrevValid = allAvailableIds.has(prev);
-            if (!isPrevValid) return finalLocalWithSyncFlags[0].id;
-            const newestId = finalLocalWithSyncFlags[0].id;
-            // If the newest notice was created in the last 5 minutes, auto-select it!
-            if (newestId && newestId !== prev && ((finalLocalWithSyncFlags[0] as any).createdAt || 0) > Date.now() - 300000) {
-              return newestId;
-            }
-            return prev;
-          });
+          setActiveNoticeId(finalLocalWithSyncFlags[0].id);
         }
         savePersistentItems(LOCAL_STORAGE_NOTICES_KEY, finalLocalWithSyncFlags);
 
@@ -209,6 +198,10 @@ export const AnnouncementCard: React.FC = () => {
       await uploadToFallbackServer('announcement', itemWithTime.title, itemWithTime.content || '', itemWithTime);
     } catch (sqlErr) {
       console.warn('SQL fallback upload notice for announcement:', sqlErr);
+    }
+
+    if (socket) {
+      socket.emit('upload_item', { category: 'announcement', item: itemWithTime });
     }
 
     // Send notification
