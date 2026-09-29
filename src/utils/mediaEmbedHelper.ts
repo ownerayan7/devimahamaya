@@ -30,7 +30,10 @@ export function isDirectVideoUrl(url: string): boolean {
   return (
     clean.startsWith('blob:') ||
     clean.startsWith('data:video') ||
-    /\.(mp4|webm|mov|m4v|ogv)(\?.*)?$/i.test(clean)
+    clean.includes('/uploads/') ||
+    clean.includes('cloudinary.com') ||
+    clean.includes('firebasestorage') ||
+    /\.(mp4|webm|mov|m4v|ogv|m3u8|avi|mkv|3gp)(\?.*)?$/i.test(clean)
   );
 }
 

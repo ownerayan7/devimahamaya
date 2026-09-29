@@ -355,42 +355,38 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
           <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
         </motion.div>
 
-        {/* The Masterpiece Maa Durga Icon */}
+        {/* The Masterpiece Circle App Logo Icon */}
         <motion.div
-          initial={{ scale: 0.94, opacity: 0 }}
+          initial={{ scale: 0.9, opacity: 1 }}
           animate={{
-            scale: phase >= 2 ? 1 : 0.94,
-            opacity: phase >= 2 ? 1 : 0,
+            scale: [1, 1.04, 1],
+            opacity: 1,
           }}
-          transition={{ duration: 0.6, ease: 'easeOut' }}
-          className="relative my-2 sm:my-3"
+          transition={{
+            scale: { duration: 2.2, repeat: Infinity, ease: 'easeInOut' },
+            opacity: { duration: 0.3 }
+          }}
+          className="relative my-3 sm:my-4"
         >
-          {/* Continuous, Glitch-Free Expanding Divine Borders */}
-          <div
-            className={`absolute -inset-2.5 rounded-[34px] border-2 border-amber-400/65 pointer-events-none transition-opacity duration-700 ${
-              phase >= 2 ? 'opacity-100 animate-icon-ring-1' : 'opacity-0'
-            }`}
-          />
-          <div
-            className={`absolute -inset-2.5 rounded-[34px] border border-amber-300/45 pointer-events-none transition-opacity duration-700 ${
-              phase >= 2 ? 'opacity-100 animate-icon-ring-2' : 'opacity-0'
-            }`}
-          />
+          {/* Continuous Deep Glowing Ring Borders */}
+          <div className="absolute -inset-3 rounded-full border-2 border-amber-400 shadow-[0_0_35px_#f59e0b] animate-ping opacity-50 pointer-events-none" />
+          <div className="absolute -inset-2.5 rounded-full border-2 border-yellow-300 shadow-[0_0_45px_rgba(251,191,36,0.9)] pointer-events-none" />
+          <div className="absolute -inset-1 rounded-full border-2 border-amber-500 pointer-events-none" />
 
-          {/* Glowing Master Icon Container */}
-          <div className="relative w-32 h-32 sm:w-44 sm:h-44 rounded-[28px] p-1.5 bg-gradient-to-br from-amber-300 via-amber-600 to-red-900 border-2 border-amber-300/90 shadow-[0_0_50px_rgba(245,158,11,0.55),_0_0_90px_rgba(220,38,38,0.35)] overflow-hidden flex items-center justify-center">
+          {/* Glowing Deep Colored Circle Logo Container */}
+          <div className="relative w-36 h-36 sm:w-48 sm:h-48 rounded-full p-1.5 bg-gradient-to-br from-yellow-300 via-amber-500 to-red-600 border-4 border-amber-300 shadow-[0_0_60px_rgba(245,158,11,0.95),_0_0_100px_rgba(220,38,38,0.75)] overflow-hidden flex items-center justify-center bg-black">
             <img
               src="/icon.png"
-              alt="Maa Durga Icon"
-              className="w-full h-full object-cover rounded-[22px]"
+              alt="11 Star Club Logo"
+              className="w-full h-full object-cover rounded-full filter contrast-125 brightness-110 saturate-125"
             />
           </div>
 
           {/* Divine Callout: "মা আসছেন" */}
-          <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 px-3.5 py-1 rounded-full bg-gradient-to-r from-red-600 via-amber-500 to-red-600 text-black font-black text-xs sm:text-sm shadow-[0_0_20px_rgba(245,158,11,0.7)] border border-yellow-200 flex items-center gap-1.5 whitespace-nowrap">
-            <Flame className="w-3 h-3 text-yellow-100 fill-current" />
+          <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 px-4 py-1 rounded-full bg-gradient-to-r from-red-600 via-amber-400 to-red-600 text-black font-black text-xs sm:text-sm shadow-[0_0_25px_rgba(245,158,11,0.95)] border-2 border-yellow-200 flex items-center gap-1.5 whitespace-nowrap z-20">
+            <Flame className="w-3.5 h-3.5 text-yellow-100 fill-current" />
             <span className="tracking-wider font-serif-bengali">মা আসছেন</span>
-            <Flame className="w-3 h-3 text-yellow-100 fill-current" />
+            <Flame className="w-3.5 h-3.5 text-yellow-100 fill-current" />
           </div>
         </motion.div>
 

@@ -18,6 +18,7 @@ import { MemberPhotoItem } from '../types';
 import { getDriveDirectImageUrl } from '../utils/driveHelper';
 import { getAppStorage } from '../lib/firebase';
 import { optimizeImage } from '../utils/imageOptimizer';
+import { uploadMediaFile } from '../utils/uploadHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 
 interface MemberPhotoUploadModalProps {
@@ -114,22 +115,11 @@ export const MemberPhotoUploadModal: React.FC<MemberPhotoUploadModalProps> = ({
         return;
       }
       try {
-        // First optimize and compress image to high-efficiency webp/jpeg (<150KB)
-        const compressedBase64 = await optimizeImage(imageFile, 1280, 1280, 0.82);
-        
-        // Check if Firebase Storage is available
-        const appStorage = getAppStorage();
-        if (appStorage) {
-          try {
-            const { ref, uploadString, getDownloadURL } = await import('firebase/storage');
-            const storageRef = ref(appStorage, `memberPhotos/${Date.now()}_${imageFile.name.replace(/\.[^/.]+$/, '')}.webp`);
-            const snapshot = await uploadString(storageRef, compressedBase64, 'data_url');
-            finalImageUrl = await getDownloadURL(snapshot.ref);
-          } catch (storageErr) {
-            console.warn('Storage upload fallback to compressed base64:', storageErr);
-            finalImageUrl = compressedBase64;
-          }
+        const uploadedCloudUrl = await uploadMediaFile(imageFile, 'memberPhotos');
+        if (uploadedCloudUrl) {
+          finalImageUrl = uploadedCloudUrl;
         } else {
+          const compressedBase64 = await optimizeImage(imageFile, 1280, 1280, 0.82);
           finalImageUrl = compressedBase64;
         }
       } catch (e) {

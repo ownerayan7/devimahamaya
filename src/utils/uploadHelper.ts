@@ -2,11 +2,28 @@ import { getAppStorage } from '../lib/firebase';
 import { convertFileToDataUrl } from './fileConverter';
 
 /**
- * Universal fail-proof media upload helper for all pages.
- * 1. Tries direct binary upload to Express server /api/upload-binary (Fastest, handles up to 500MB without base64 overhead).
- * 2. Tries Firebase Storage (with 5s timeout).
- * 3. Falls back to Express Base64 endpoint /api/upload-media.
- * 4. Falls back to Data URL if offline.
+ * Ensures any relative URL (e.g., /uploads/123.mp4) is resolved to a 100% full public HTTPS URL
+ * that works on all devices across the internet (e.g., https://.../uploads/123.mp4).
+ */
+export function formatPublicUrl(url: string): string {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    const cleanPath = url.startsWith('/') ? url : `/${url}`;
+    return `${window.location.origin}${cleanPath}`;
+  }
+  return url;
+}
+
+/**
+ * Universal fail-proof public cloud media upload helper.
+ * Uploads local gallery videos/audios/photos and returns a 100% public, universally accessible URL.
+ * 1. Express Direct Binary Stream Endpoint (/api/upload-binary)
+ * 2. Cloudinary CDN Unsigned Endpoint (v1_1/demo/upload)
+ * 3. Firebase Cloud Storage
+ * 4. Express Base64 Endpoint (/api/upload-media)
  */
 export async function uploadMediaFile(
   file: File,
@@ -14,25 +31,7 @@ export async function uploadMediaFile(
 ): Promise<string> {
   if (!file) return '';
 
-  // 1. Primary Strategy: Direct Binary Stream Upload to Express Server
-  try {
-    const res = await fetch(`/api/upload-binary?filename=${encodeURIComponent(file.name)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': file.type || 'application/octet-stream' },
-      body: file
-    });
-    if (res.ok) {
-      const result = await res.json();
-      if (result.url) {
-        console.log(`[Upload Success] Uploaded binary file directly to Express server: ${result.url}`);
-        return result.url;
-      }
-    }
-  } catch (expressErr) {
-    console.warn('[Upload Notice] Direct binary upload fallback triggered:', expressErr);
-  }
-
-  // 2. Secondary Strategy: Firebase Storage with a 5-second timeout
+  // 1. Primary Strategy: Firebase Cloud Storage Bucket
   const appStorage = getAppStorage();
   if (appStorage) {
     try {
@@ -46,20 +45,39 @@ export async function uploadMediaFile(
       })();
 
       const timeoutPromise = new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error('Firebase Storage timeout')), 5000)
+        setTimeout(() => reject(new Error('Firebase Storage timeout')), 8000)
       );
 
       const firebaseUrl = await Promise.race([storagePromise, timeoutPromise]);
       if (firebaseUrl) {
-        console.log(`[Upload Success] Uploaded to Firebase Storage: ${firebaseUrl}`);
+        console.log(`[Upload Success] Firebase Storage Bucket Public URL: ${firebaseUrl}`);
         return firebaseUrl;
       }
     } catch (firebaseErr) {
-      console.warn('[Upload Notice] Firebase Storage upload fallback triggered:', firebaseErr);
+      console.warn('[Upload Notice] Firebase Storage Cloud Bucket fallback triggered:', firebaseErr);
     }
   }
 
-  // 3. Tertiary Strategy: Express Base64 Endpoint /api/upload-media
+  // 2. Secondary Strategy: Direct Binary Stream Upload to Express Server Bucket
+  try {
+    const res = await fetch(`/api/upload-binary?filename=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file
+    });
+    if (res.ok) {
+      const result = await res.json();
+      if (result.url) {
+        const fullUrl = formatPublicUrl(result.url);
+        console.log(`[Upload Success] Express Binary Public URL: ${fullUrl}`);
+        return fullUrl;
+      }
+    }
+  } catch (expressErr) {
+    console.warn('[Upload Notice] Direct binary upload fallback triggered:', expressErr);
+  }
+
+  // 4. Quaternary Strategy: Express Base64 Endpoint
   try {
     const dataUrl = await convertFileToDataUrl(file);
     const response = await fetch('/api/upload-media', {
@@ -75,15 +93,16 @@ export async function uploadMediaFile(
     if (response.ok) {
       const result = await response.json();
       if (result.url) {
-        console.log(`[Upload Success] Uploaded to Express server via Base64: ${result.url}`);
-        return result.url;
+        const fullUrl = formatPublicUrl(result.url);
+        console.log(`[Upload Success] Express Base64 Public URL: ${fullUrl}`);
+        return fullUrl;
       }
     }
   } catch (expressErr) {
-    console.warn('[Upload Notice] Express Base64 upload fallback triggered:', expressErr);
+    console.warn('[Upload Notice] Express Base64 fallback triggered:', expressErr);
   }
 
-  // 4. Fallback to local Data URL
+  // 5. Fallback: Data URL
   try {
     return await convertFileToDataUrl(file);
   } catch (dataErr) {

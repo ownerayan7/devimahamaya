@@ -15,6 +15,7 @@ import { PrayerItem } from '../types';
 import { getVideoBlob } from '../utils/videoStorageHelper';
 import { getDriveVideoEmbedUrl, extractDriveFileId } from '../utils/driveHelper';
 import { registerHtmlMediaElement, subscribeToMediaStop } from '../utils/mediaCoordinator';
+import { formatPublicUrl } from '../utils/uploadHelper';
 
 interface CustomPrayerCardProps {
   item: PrayerItem;
@@ -43,24 +44,28 @@ export const CustomPrayerCard: React.FC<CustomPrayerCardProps> = ({
     let isMounted = true;
     let createdUrl: string | null = null;
 
-    if (item.mediaSource === 'local') {
+    const publicMediaUrl = formatPublicUrl(item.mediaUrl || item.embedUrl || '');
+
+    if (publicMediaUrl && (publicMediaUrl.startsWith('http://') || publicMediaUrl.startsWith('https://') || publicMediaUrl.startsWith('/uploads/'))) {
+      setResolvedUrl(publicMediaUrl);
+    } else if (item.mediaSource === 'local') {
       getVideoBlob(item.id)
         .then((blob) => {
           if (!isMounted) return;
           if (blob && blob instanceof Blob) {
             createdUrl = URL.createObjectURL(blob);
             setResolvedUrl(createdUrl);
-          } else if (item.mediaUrl) {
-            setResolvedUrl(item.mediaUrl);
+          } else if (publicMediaUrl) {
+            setResolvedUrl(publicMediaUrl);
           }
         })
         .catch(() => {
-          if (isMounted && item.mediaUrl) {
-            setResolvedUrl(item.mediaUrl);
+          if (isMounted && publicMediaUrl) {
+            setResolvedUrl(publicMediaUrl);
           }
         });
     } else {
-      setResolvedUrl(item.mediaUrl);
+      setResolvedUrl(publicMediaUrl);
     }
 
     return () => {
@@ -69,7 +74,7 @@ export const CustomPrayerCard: React.FC<CustomPrayerCardProps> = ({
         URL.revokeObjectURL(createdUrl);
       }
     };
-  }, [item.id, item.mediaSource, item.mediaUrl]);
+  }, [item.id, item.mediaSource, item.mediaUrl, item.embedUrl]);
 
   const mediaSrc = resolvedUrl || item.mediaUrl;
   let embedSrc = item.embedUrl || mediaSrc;

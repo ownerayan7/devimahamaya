@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { ClubStoredItem, getStoredClubItems, saveClubStoredItem, fetchCloudClubItems, subscribeCloudClubItems, deleteClubStoredItem } from '../utils/clubStorageManager';
 import { optimizeImage } from '../utils/imageOptimizer';
+import { uploadMediaFile } from '../utils/uploadHelper';
 
 interface ClubDataStorageSectionProps {
   isAdmin?: boolean;
@@ -113,16 +114,17 @@ export const ClubDataStorageSection: React.FC<ClubDataStorageSectionProps> = ({ 
       else if (file.type.startsWith('audio/')) t = 'audio';
       else if (file.type.includes('pdf') || file.type.includes('document')) t = 'document';
 
-      let resultUrl = '';
-      if (file.type.startsWith('image/')) {
-        resultUrl = await optimizeImage(file, 1200, 1200, 0.85);
-      } else {
-        // Read as data url for audio/video/docs
-        const reader = new FileReader();
-        resultUrl = await new Promise((resolve) => {
-          reader.onload = (evt) => resolve(evt.target?.result as string);
-          reader.readAsDataURL(file);
-        });
+      let resultUrl = await uploadMediaFile(file, 'clubStorage');
+      if (!resultUrl) {
+        if (file.type.startsWith('image/')) {
+          resultUrl = await optimizeImage(file, 1200, 1200, 0.85);
+        } else {
+          const reader = new FileReader();
+          resultUrl = await new Promise((resolve) => {
+            reader.onload = (evt) => resolve(evt.target?.result as string);
+            reader.readAsDataURL(file);
+          });
+        }
       }
 
       await saveClubStoredItem({

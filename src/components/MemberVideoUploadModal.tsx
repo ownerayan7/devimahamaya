@@ -229,7 +229,7 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
           title: title.trim(),
           type: 'video',
           source: 'device',
-          url: videoFilePreview,
+          url: finalVideoUrl,
           thumbnailUrl: thumbnailPreview,
           authorName: authorName.trim() || 'ক্লাব সদস্য',
           description: description.trim() || 'মোবাইল গ্যালারি ভিডিও',

@@ -213,17 +213,12 @@ export const SundayPrayerPage: React.FC = () => {
       if (data && data.category === 'prayer_item' && data.item) {
         console.log('[WebSocket] Real-time prayer received:', data.item);
         const newPrayer = data.item;
-        if (data.replacePrevious) {
-          const updatedCustom = [newPrayer];
+        loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((local) => {
+          if (local.some((p) => p.id === newPrayer.id)) return;
+          const updatedCustom = [newPrayer, ...local];
           savePersistentItems(LOCAL_STORAGE_KEY, updatedCustom);
-          setItems([...updatedCustom, ...INITIAL_PRAYER_ITEMS]);
-        } else {
-          loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((local) => {
-            const updatedCustom = [newPrayer, ...local.filter(p => p.id !== newPrayer.id)];
-            savePersistentItems(LOCAL_STORAGE_KEY, updatedCustom);
-            setItems([...updatedCustom, ...INITIAL_PRAYER_ITEMS]);
-          });
-        }
+          setItems([...updatedCustom, ...INITIAL_PRAYER_ITEMS.filter(p => !updatedCustom.some(i => i.id === p.id))]);
+        });
       }
     };
 
@@ -298,19 +293,10 @@ export const SundayPrayerPage: React.FC = () => {
       synced: false
     } as any;
 
-    // Purge previous custom prayers so ONLY THIS NEW PRAYER remains active
-    const oldCustomItems = items.filter(i => i.isCustom && i.id !== itemWithTime.id);
-    for (const oldItem of oldCustomItems) {
-      try {
-        await deleteDoc(doc(db, 'prayerItems', String(oldItem.id)));
-      } catch (err) {
-        console.warn('Failed to delete old prayer document from Firestore:', err);
-      }
-    }
-
-    const updated = [itemWithTime, ...INITIAL_PRAYER_ITEMS];
+    const updated = [itemWithTime, ...items.filter(i => i.id !== itemWithTime.id)];
     setItems(updated);
-    await savePersistentItems(LOCAL_STORAGE_KEY, [itemWithTime]);
+    const customItems = updated.filter((i) => i.isCustom);
+    await savePersistentItems(LOCAL_STORAGE_KEY, customItems);
 
     // Automatically set as the main Active Prayer video/media on the top player for ALL devices in the world
     const newLiveConfig = {
@@ -340,7 +326,7 @@ export const SundayPrayerPage: React.FC = () => {
     }
 
     if (socket) {
-      socket.emit('upload_item', { category: 'prayer_item', item: itemWithTime, replacePrevious: true });
+      socket.emit('upload_item', { category: 'prayer_item', item: itemWithTime });
       socket.emit('upload_item', { category: 'active_prayer', item: newLiveConfig });
     }
 

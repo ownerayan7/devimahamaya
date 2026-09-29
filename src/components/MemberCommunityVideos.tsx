@@ -30,6 +30,7 @@ import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firesto
 import { uploadToFallbackServer } from '../utils/persistentStorage';
 import { socket } from '../lib/socket';
 import { sendAppNotification } from '../utils/notificationHelper';
+import { formatPublicUrl } from '../utils/uploadHelper';
 
 const STORAGE_KEY = '11star_member_community_videos_v2';
 const LIKES_STORAGE_KEY = '11star_member_video_likes_v2';
@@ -71,8 +72,9 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
     broadcastMediaPlaybackStarted(`member-video-${v.id}`, v.videoType === 'local' ? 'video' : 'youtube');
 
     if (v.videoType === 'local' || Boolean(v.videoFileUrl)) {
-      if (v.videoFileUrl && !v.videoFileUrl.startsWith('blob:')) {
-        setSelectedFileUrl(v.videoFileUrl);
+      const publicUrl = formatPublicUrl(v.videoFileUrl || '');
+      if (publicUrl && !publicUrl.startsWith('blob:')) {
+        setSelectedFileUrl(publicUrl);
       } else {
         const blobData = await getVideoBlob(v.id);
         if (blobData) {
