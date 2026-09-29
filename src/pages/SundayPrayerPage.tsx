@@ -203,14 +203,27 @@ export const SundayPrayerPage: React.FC = () => {
 
     // WebSocket (Socket.IO) Real-time sync (Facebook/YouTube style)
     const handleRemoteItem = (data: any) => {
+      if (data && data.category === 'active_prayer' && data.item) {
+        console.log('[WebSocket] Real-time active prayer config received:', data.item);
+        setLiveConfig(data.item);
+        try {
+          localStorage.setItem(LIVE_CONFIG_KEY, JSON.stringify(data.item));
+        } catch (e) {}
+      }
       if (data && data.category === 'prayer_item' && data.item) {
         console.log('[WebSocket] Real-time prayer received:', data.item);
-        loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((local) => {
-          if (local.some((p) => p.id === data.item.id)) return;
-          const updatedCustom = [data.item, ...local];
+        const newPrayer = data.item;
+        if (data.replacePrevious) {
+          const updatedCustom = [newPrayer];
           savePersistentItems(LOCAL_STORAGE_KEY, updatedCustom);
-          setItems([...updatedCustom, ...INITIAL_PRAYER_ITEMS.filter(p => !updatedCustom.some(i => i.id === p.id))]);
-        });
+          setItems([...updatedCustom, ...INITIAL_PRAYER_ITEMS]);
+        } else {
+          loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((local) => {
+            const updatedCustom = [newPrayer, ...local.filter(p => p.id !== newPrayer.id)];
+            savePersistentItems(LOCAL_STORAGE_KEY, updatedCustom);
+            setItems([...updatedCustom, ...INITIAL_PRAYER_ITEMS]);
+          });
+        }
       }
     };
 
@@ -284,18 +297,39 @@ export const SundayPrayerPage: React.FC = () => {
       createdAt: Date.now(),
       synced: false
     } as any;
-    const updated = [itemWithTime, ...items.filter(i => i.id !== itemWithTime.id)];
+
+    // Purge previous custom prayers so ONLY THIS NEW PRAYER remains active
+    const oldCustomItems = items.filter(i => i.isCustom && i.id !== itemWithTime.id);
+    for (const oldItem of oldCustomItems) {
+      try {
+        await deleteDoc(doc(db, 'prayerItems', String(oldItem.id)));
+      } catch (err) {
+        console.warn('Failed to delete old prayer document from Firestore:', err);
+      }
+    }
+
+    const updated = [itemWithTime, ...INITIAL_PRAYER_ITEMS];
     setItems(updated);
-    const customItems = updated.filter((i) => i.isCustom);
-    await savePersistentItems(LOCAL_STORAGE_KEY, customItems);
+    await savePersistentItems(LOCAL_STORAGE_KEY, [itemWithTime]);
+
+    // Automatically set as the main Active Prayer video/media on the top player for ALL devices in the world
+    const newLiveConfig = {
+      ...liveConfig,
+      isLiveActive: false,
+      fallbackTitle: newItem.title,
+      fallbackUrl: newItem.mediaUrl || newItem.embedUrl || '',
+      activePrayerId: itemWithTime.id
+    };
+    setLiveConfig(newLiveConfig);
+    try {
+      localStorage.setItem(LIVE_CONFIG_KEY, JSON.stringify(newLiveConfig));
+      await setDoc(doc(db, 'appSettings', 'prayerLiveConfig'), newLiveConfig);
+    } catch (e) {}
 
     try {
       await setDoc(doc(db, 'prayerItems', itemWithTime.id), itemWithTime);
     } catch (e: any) {
       console.warn('Failed to add prayer item to Firestore:', e);
-      if (typeof (window as any).showFirestoreError === 'function') {
-        (window as any).showFirestoreError(`prayerItems save failed: ${e.message || e}`);
-      }
     }
 
     // PostgreSQL backup upload for 100% resilient cross-device syncing
@@ -306,7 +340,8 @@ export const SundayPrayerPage: React.FC = () => {
     }
 
     if (socket) {
-      socket.emit('upload_item', { category: 'prayer_item', item: itemWithTime });
+      socket.emit('upload_item', { category: 'prayer_item', item: itemWithTime, replacePrevious: true });
+      socket.emit('upload_item', { category: 'active_prayer', item: newLiveConfig });
     }
 
     // Dispatch global app notification
@@ -331,9 +366,6 @@ export const SundayPrayerPage: React.FC = () => {
       await setDoc(doc(db, 'appSettings', 'prayerLiveConfig'), newCfg, { merge: true });
     } catch (e: any) {
       console.warn('Failed to save live config to Firestore:', e);
-      if (typeof (window as any).showFirestoreError === 'function') {
-        (window as any).showFirestoreError(`prayerLiveConfig save failed: ${e.message || e}`);
-      }
     }
   };
 
@@ -353,6 +385,27 @@ export const SundayPrayerPage: React.FC = () => {
         await deleteDoc(doc(db, 'prayerItems', itemToDeleteId));
       } catch (err) {
         console.warn('Failed to delete prayer from Firestore:', err);
+      }
+
+      // Reset liveConfig if the deleted item was active or list is cleared
+      if (liveConfig.activePrayerId === itemToDeleteId || customItems.length === 0) {
+        const resetConfig = {
+          isLiveActive: false,
+          liveUrl: 'https://www.youtube-nocookie.com/embed/wm1OtR2kEVc?enablejsapi=1&autoplay=1',
+          fallbackTitle: 'রবিবার বিশেষ প্রার্থনা ও কীর্তন (রেকর্ডড / গ্যালারি)',
+          fallbackUrl: 'https://www.youtube-nocookie.com/embed/wm1OtR2kEVc?enablejsapi=1&rel=0',
+          blobId: '',
+          isLocalBlob: false,
+          activePrayerId: ''
+        };
+        setLiveConfig(resetConfig);
+        try {
+          localStorage.setItem(LIVE_CONFIG_KEY, JSON.stringify(resetConfig));
+          await setDoc(doc(db, 'appSettings', 'prayerLiveConfig'), resetConfig);
+        } catch (e) {}
+        if (socket) {
+          socket.emit('upload_item', { category: 'active_prayer', item: resetConfig });
+        }
       }
     }
     setIsDeleteAuthOpen(false);
@@ -389,6 +442,14 @@ export const SundayPrayerPage: React.FC = () => {
 
           {/* Admin Action Buttons */}
           <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={() => setIsAdminAuthModalOpen(true)}
+              className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs sm:text-sm font-extrabold transition-all shadow-[0_0_20px_rgba(245,158,11,0.35)] hover:scale-105 active:scale-95 cursor-pointer"
+            >
+              <Plus className="w-4 h-4 text-black shrink-0" />
+              <span>প্রার্থনা ভিডিও/অডিও আপলোড করুন (অ্যাডমিন)</span>
+            </button>
+
             <button
               id="prayer-alert-trigger-btn"
               onClick={() => setIsNotifAuthModalOpen(true)}

@@ -3,9 +3,10 @@ import { convertFileToDataUrl } from './fileConverter';
 
 /**
  * Universal fail-proof media upload helper for all pages.
- * Tries Firebase Storage first (with 4s timeout).
- * Falls back to Express server /api/upload-media endpoint.
- * Falls back to Data URL if server is unavailable.
+ * 1. Tries direct binary upload to Express server /api/upload-binary (Fastest, handles up to 500MB without base64 overhead).
+ * 2. Tries Firebase Storage (with 5s timeout).
+ * 3. Falls back to Express Base64 endpoint /api/upload-media.
+ * 4. Falls back to Data URL if offline.
  */
 export async function uploadMediaFile(
   file: File,
@@ -13,7 +14,25 @@ export async function uploadMediaFile(
 ): Promise<string> {
   if (!file) return '';
 
-  // 1. Try Firebase Storage with a 4-second timeout
+  // 1. Primary Strategy: Direct Binary Stream Upload to Express Server
+  try {
+    const res = await fetch(`/api/upload-binary?filename=${encodeURIComponent(file.name)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': file.type || 'application/octet-stream' },
+      body: file
+    });
+    if (res.ok) {
+      const result = await res.json();
+      if (result.url) {
+        console.log(`[Upload Success] Uploaded binary file directly to Express server: ${result.url}`);
+        return result.url;
+      }
+    }
+  } catch (expressErr) {
+    console.warn('[Upload Notice] Direct binary upload fallback triggered:', expressErr);
+  }
+
+  // 2. Secondary Strategy: Firebase Storage with a 5-second timeout
   const appStorage = getAppStorage();
   if (appStorage) {
     try {
@@ -27,7 +46,7 @@ export async function uploadMediaFile(
       })();
 
       const timeoutPromise = new Promise<string>((_, reject) =>
-        setTimeout(() => reject(new Error('Firebase Storage timeout')), 4000)
+        setTimeout(() => reject(new Error('Firebase Storage timeout')), 5000)
       );
 
       const firebaseUrl = await Promise.race([storagePromise, timeoutPromise]);
@@ -40,7 +59,7 @@ export async function uploadMediaFile(
     }
   }
 
-  // 2. Fallback to Express backend /api/upload-media
+  // 3. Tertiary Strategy: Express Base64 Endpoint /api/upload-media
   try {
     const dataUrl = await convertFileToDataUrl(file);
     const response = await fetch('/api/upload-media', {
@@ -56,15 +75,15 @@ export async function uploadMediaFile(
     if (response.ok) {
       const result = await response.json();
       if (result.url) {
-        console.log(`[Upload Success] Uploaded to Express server: ${result.url}`);
+        console.log(`[Upload Success] Uploaded to Express server via Base64: ${result.url}`);
         return result.url;
       }
     }
   } catch (expressErr) {
-    console.warn('[Upload Notice] Express backend upload fallback triggered:', expressErr);
+    console.warn('[Upload Notice] Express Base64 upload fallback triggered:', expressErr);
   }
 
-  // 3. Fallback to local Data URL
+  // 4. Fallback to local Data URL
   try {
     return await convertFileToDataUrl(file);
   } catch (dataErr) {

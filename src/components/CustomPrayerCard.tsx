@@ -167,11 +167,11 @@ export const CustomPrayerCard: React.FC<CustomPrayerCardProps> = ({
 
           <button
             onClick={() => onDeleteRequest(item.id)}
-            className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-red-500/15 hover:bg-red-500/25 border border-red-500/30 text-red-300 transition-colors"
-            title="এই প্রার্থনা মুছে ফেলুন (অ্যাডমিন)"
+            className="px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 bg-red-500/20 hover:bg-red-500/35 border border-red-500/50 text-red-200 transition-all shadow-md active:scale-95"
+            title="এই প্রার্থনাটি মুছে ফেলুন (অ্যাডমিন)"
           >
-            <Trash2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">মুছুন</span>
+            <Trash2 className="w-3.5 h-3.5 text-red-400 shrink-0" />
+            <span>প্রার্থনা মুছুন</span>
           </button>
         </div>
       </div>

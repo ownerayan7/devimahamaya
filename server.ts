@@ -49,8 +49,8 @@ io.on('connection', (socket) => {
 });
 
 app.use(cors());
-app.use(express.json({ limit: '100mb' }));
-app.use(express.urlencoded({ limit: '100mb', extended: true }));
+app.use(express.json({ limit: '500mb' }));
+app.use(express.urlencoded({ limit: '500mb', extended: true }));
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'public', 'uploads');
@@ -442,6 +442,29 @@ app.delete('/api/sync-logs/:id', async (req, res) => {
   } catch (error: any) {
     console.error('Error deleting sync log:', error);
     res.status(500).json({ error: error.message || 'Failed to delete sync log' });
+  }
+});
+
+// Direct Binary File Upload Endpoint (Fast, handles huge files without base64 overhead)
+app.post('/api/upload-binary', express.raw({ type: '*/*', limit: '500mb' }), async (req, res) => {
+  try {
+    const filename = (req.query.filename as string) || 'file.mp4';
+    const ext = filename.split('.').pop() || 'bin';
+    const cleanName = filename.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const safeFilename = `${Date.now()}_${cleanName}.${ext}`;
+    const filePath = path.join(uploadsDir, safeFilename);
+
+    await fs.promises.writeFile(filePath, req.body);
+
+    const host = req.get('host') || 'localhost:3000';
+    const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+    const publicUrl = `${protocol}://${host}/uploads/${safeFilename}`;
+
+    console.log(`[Binary Upload] Successfully saved file: ${safeFilename} (${req.body.length} bytes) -> ${publicUrl}`);
+    return res.json({ success: true, url: publicUrl, filename: safeFilename });
+  } catch (err: any) {
+    console.error('[Binary Upload Error]', err);
+    return res.status(500).json({ error: err.message || 'Failed to save binary upload' });
   }
 });
 
