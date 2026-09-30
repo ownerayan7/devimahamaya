@@ -140,12 +140,14 @@ export const SundayPrayerPage: React.FC = () => {
         const cloudIds = new Set(firestoreItems.map(p => String(p.id)));
 
         // --- SAFE DELETION DETECTION ---
-        // If an item has synced: true but is missing from cloud, it was DELETED by an admin.
-        // We MUST discard it from local storage so it does not reappear!
+        // If an item is missing from cloud and was synced or created > 10s ago, it was DELETED!
         const filteredLocal = local.filter((item) => {
-          if (item.isCustom && item.synced === true && !cloudIds.has(String(item.id))) {
-            console.log(`[Sync] Detected deletion of prayer item: ${item.id}. Removing from local cache.`);
-            return false;
+          if (item.isCustom && !cloudIds.has(String(item.id))) {
+            const isOld = (Date.now() - (item.createdAt || 0)) > 10000;
+            if (item.synced === true || isOld) {
+              console.log(`[Sync] Detected deletion of prayer item: ${item.id}. Removing from local cache.`);
+              return false;
+            }
           }
           return true;
         });

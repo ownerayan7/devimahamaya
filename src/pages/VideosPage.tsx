@@ -1,45 +1,75 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
+  Play,
   ExternalLink,
   Youtube,
   Sparkles,
   RefreshCw,
-  Play,
-  Flame,
   Radio,
   Tv,
   Film,
-  Smartphone,
   Share2,
   Check,
-  Maximize2,
-  Lock,
   Plus,
   Users,
   Trash2,
-  FileVideo
+  Heart,
+  Video,
+  Clock,
+  AlertCircle,
+  Eye,
+  Globe,
+  MessageCircle,
+  Instagram
 } from 'lucide-react';
 import { CLUB_INFO, FEATURED_VIDEOS } from '../data/clubData';
-import { VideoItem } from '../types';
+import { INITIAL_MEMBER_VIDEOS } from '../data/memberVideosData';
+import { VideoItem, MemberVideoItem } from '../types';
 import { AddOfficialVideoModal } from '../components/AddOfficialVideoModal';
+import { MemberVideoUploadModal } from '../components/MemberVideoUploadModal';
 import { AdminPhotoAuthModal } from '../components/AdminPhotoAuthModal';
-import { MemberCommunityVideos } from '../components/MemberCommunityVideos';
-import { AdminStorageAccessCard } from '../components/AdminStorageAccessCard';
 import { getVideoBlob, deleteVideoBlob } from '../utils/videoStorageHelper';
+import { parseUniversalMedia, getPublicMediaUrl, isFacebookVideoUrl } from '../utils/mediaEmbedHelper';
 import { copyTextToClipboard } from '../utils/clipboardHelper';
-import { broadcastMediaPlaybackStarted, registerHtmlMediaElement, subscribeToMediaStop } from '../utils/mediaCoordinator';
+import { broadcastMediaPlaybackStarted, subscribeToMediaStop, registerHtmlMediaElement } from '../utils/mediaCoordinator';
+import { getDeviceId, isDeviceUploader } from '../utils/deviceHelper';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
+import { loadPersistentItems, savePersistentItems } from '../utils/persistentStorage';
 import { sendAppNotification } from '../utils/notificationHelper';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
-import { socket } from '../lib/socket';
-import { getPublicMediaUrl } from '../utils/mediaEmbedHelper';
 
-const LOCAL_STORAGE_KEY = '11star_custom_official_videos_v2';
+const OFFICIAL_STORAGE_KEY = '11star_custom_official_videos_v5';
+const MEMBER_STORAGE_KEY = '11star_member_community_videos_v5';
+const LIKES_STORAGE_KEY = '11star_videos_likes_v5';
 
-// Helper to extract upload timestamp from createdAt or id (fallback)
-const getCreatedTimestamp = (v: any): number => {
+// 1. Exact 4 Default Official Videos & Exact 1 Default Sodosoo Video initially as requested (Point 1)
+const DEFAULT_OFFICIAL_VIDEOS_4 = FEATURED_VIDEOS.slice(0, 4);
+const DEFAULT_MEMBER_VIDEOS_1 = INITIAL_MEMBER_VIDEOS.slice(0, 1);
+
+export interface UnifiedVideoCardItem {
+  id: string;
+  title: string;
+  description: string;
+  sourceType: 'official' | 'member';
+  category: string;
+  videoType: 'youtube' | 'local' | 'facebook' | 'direct' | 'drive';
+  youtubeId?: string;
+  youtubeUrl?: string;
+  videoFileUrl?: string;
+  thumbnailUrl?: string;
+  authorName?: string;
+  authorRole?: string;
+  duration?: string;
+  tag?: string;
+  likesCount: number;
+  dateAdded: string;
+  createdAt: number;
+  uploaderDeviceId?: string;
+  isCustom?: boolean;
+}
+
+const getTimestamp = (v: any): number => {
   if (typeof v?.createdAt === 'number' && !isNaN(v.createdAt)) return v.createdAt;
   const match = String(v?.id || '').match(/\d{10,}/);
   if (match) {
@@ -53,845 +83,861 @@ interface VideosPageProps {
   onOpenAdminStorage?: () => void;
 }
 
-export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) => {
-  // 1. Initialize customVideos synchronously from localStorage sorted newest-first
-  const [customVideos, setCustomVideos] = useState<VideoItem[]>(() => {
+export const VideosPage: React.FC<VideosPageProps> = () => {
+  // Official Videos (Club Admin Videos)
+  const [officialVideos, setOfficialVideos] = useState<VideoItem[]>(() => {
     try {
-      const saved = localStorage.getItem(LOCAL_STORAGE_KEY);
+      const saved = localStorage.getItem(OFFICIAL_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return [...parsed].sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
-        }
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch (e) {
-      console.error('Failed to load custom videos from localStorage:', e);
-    }
-    return [];
+    } catch (e) {}
+    return DEFAULT_OFFICIAL_VIDEOS_4;
   });
 
-  // Automatically make the last uploaded video the initial active video
-  const initialVideo: VideoItem = (customVideos.length > 0 ? customVideos[0] : FEATURED_VIDEOS[0]) || {
-    id: 'live-stream-1',
-    youtubeId: '_65N3D5zTYg',
-    title: 'সার্বজনীন শ্রী শ্রী শারদীয় দুর্গোৎসব',
-    description: '',
-    category: 'durga-puja',
-    duration: 'চলমান ভিডিও',
-    tag: 'অফিসিয়াল'
-  };
+  // Member Videos (Sodosoo Videos)
+  const [memberVideos, setMemberVideos] = useState<MemberVideoItem[]>(() => {
+    try {
+      const saved = localStorage.getItem(MEMBER_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch (e) {}
+    return DEFAULT_MEMBER_VIDEOS_1;
+  });
 
-  const [activeVideoId, setActiveVideoId] = useState<string>(initialVideo.youtubeId || initialVideo.id || '_65N3D5zTYg');
-  const [activeVideoType, setActiveVideoType] = useState<'youtube' | 'local' | 'direct'>(
-    initialVideo.videoType === 'local' || Boolean(initialVideo.videoFileUrl) ? 'local' : 'youtube'
-  );
-  const [activeVideoFileUrl, setActiveVideoFileUrl] = useState<string>(initialVideo.videoFileUrl || '');
-  const [activeVideoTitle, setActiveVideoTitle] = useState<string>(initialVideo.title || '');
-  const [activeVideoDesc, setActiveVideoDesc] = useState<string>(initialVideo.description || '');
-  const [activeVideoDuration, setActiveVideoDuration] = useState<string>(initialVideo.duration || 'চলমান ভিডিও');
-  const [activeVideoTag, setActiveVideoTag] = useState<string>(initialVideo.tag || '');
-
-  const [selectedFilter, setSelectedFilter] = useState<'all' | 'live' | 'theme' | 'cultural' | 'shorts'>('all');
-  const [copiedLink, setCopiedLink] = useState(false);
-  const [isAdminAuthOpen, setIsAdminAuthOpen] = useState(false);
+  // UI Filters & Modals
+  const [activeTab, setActiveTab] = useState<'all' | 'official' | 'member'>('all');
   const [isAddOfficialOpen, setIsAddOfficialOpen] = useState(false);
-  const [videoToDeleteId, setVideoToDeleteId] = useState<string | null>(null);
+  const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+  
+  // Admin Auth Modals
+  const [isAdminUploadAuthOpen, setIsAdminUploadAuthOpen] = useState(false);
   const [isDeleteAuthOpen, setIsDeleteAuthOpen] = useState(false);
+  const [itemToDelete, setItemToDelete] = useState<UnifiedVideoCardItem | null>(null);
 
-  const playerRef = useRef<HTMLDivElement>(null);
-  const localVideoRef = useRef<HTMLVideoElement | null>(null);
-  const hasUserManuallySelectedRef = useRef<boolean>(false);
+  // Likes & Shares
+  const [likesMap, setLikesMap] = useState<Record<string, number>>({});
+  const [userLikedMap, setUserLikedMap] = useState<Record<string, boolean>>({});
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
+  // Lightbox Fullscreen Video Player State
+  const [activeLightboxVideo, setActiveLightboxVideo] = useState<UnifiedVideoCardItem | null>(null);
+  const [activeVideoId, setActiveVideoId] = useState<string | null>(null);
+
+  // Load Likes State
   useEffect(() => {
-    if (localVideoRef.current && activeVideoType === 'local') {
-      const unsub = registerHtmlMediaElement(localVideoRef.current, `official-video-${activeVideoId}`, 'video');
-      return () => unsub();
-    }
-  }, [activeVideoType, activeVideoFileUrl, activeVideoId]);
-
-  // Subscribe to media stop to pause when any other media plays
-  useEffect(() => {
-    const currentId = `official-video-${activeVideoId}`;
-    const unsub = subscribeToMediaStop(currentId, () => {
-      if (localVideoRef.current && !localVideoRef.current.paused) {
-        try {
-          localVideoRef.current.pause();
-        } catch {}
+    try {
+      const savedLikes = localStorage.getItem(LIKES_STORAGE_KEY);
+      if (savedLikes) {
+        setUserLikedMap(JSON.parse(savedLikes));
       }
-    });
-    return () => unsub();
-  }, [activeVideoId]);
+    } catch (e) {}
+  }, []);
 
-  // Load custom official videos from persistent storage + Firestore in real time
+  // Sync Official Videos from Firestore in Real-Time with persistent load merging
   useEffect(() => {
-    // 1. Initial persistent load
-    loadPersistentItems<VideoItem>(LOCAL_STORAGE_KEY).then((saved) => {
+    loadPersistentItems<VideoItem>(OFFICIAL_STORAGE_KEY).then((saved) => {
       if (saved && saved.length > 0) {
-        const sorted = [...saved].sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
-        setCustomVideos(sorted);
-        if (!hasUserManuallySelectedRef.current && sorted.length > 0) {
-          handleSelectVideo(sorted[0], false, false);
-        }
+        setOfficialVideos(saved);
       }
     });
 
-    // 2. Real-time Firestore sync with merge
-    try {
-      const unsub = onSnapshot(
-        collection(db, 'officialVideos'),
-        (snapshot) => {
-          const firestoreList: VideoItem[] = [];
-          snapshot.forEach((docSnap) => {
-            firestoreList.push({
-              ...(docSnap.data() as VideoItem),
-              id: docSnap.id,
-            });
-          });
+    const unsub = onSnapshot(collection(db, 'officialVideos'), (snapshot) => {
+      const firestoreList: VideoItem[] = [];
+      snapshot.forEach((docSnap) => {
+        firestoreList.push({
+          ...(docSnap.data() as VideoItem),
+          id: docSnap.id,
+        });
+      });
 
-          loadPersistentItems<VideoItem>(LOCAL_STORAGE_KEY).then((local) => {
-            const cloudIds = new Set(firestoreList.map(v => String(v.id)));
+      // Smart Real-time Merge (Always preserves the 4 default official videos + any cloud uploads)
+      const merged = [
+        ...firestoreList,
+        ...DEFAULT_OFFICIAL_VIDEOS_4.filter((init) => !firestoreList.some((f) => f.id === init.id))
+      ];
 
-            // --- SAFE DELETION DETECTION ---
-            // If an item has synced: true but is missing from cloud, it was DELETED by an admin.
-            // We MUST discard it from local storage so it does not reappear!
-            const filteredLocal = local.filter((item) => {
-              if (item.isCustom && (item as any).synced === true && !cloudIds.has(String(item.id))) {
-                console.log(`[Sync] Detected deletion of video: ${item.id}. Removing from local cache.`);
-                return false;
-              }
-              return true;
-            });
+      const sorted = merged.sort((a, b) => getTimestamp(b) - getTimestamp(a));
+      setOfficialVideos(sorted);
+      savePersistentItems(OFFICIAL_STORAGE_KEY, sorted);
+    }, (err) => {
+      console.warn('Firestore officialVideos notice:', err);
+    });
 
-            const merged = mergeItemsWithLocal(firestoreList, filteredLocal);
-            merged.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
-
-            // Mark any item successfully in cloud as synced: true
-            const finalLocalWithSyncFlags = merged.map((item) => {
-              if (cloudIds.has(String(item.id))) {
-                return { ...item, synced: true };
-              }
-              return item;
-            });
-
-            setCustomVideos(finalLocalWithSyncFlags);
-            savePersistentItems(LOCAL_STORAGE_KEY, finalLocalWithSyncFlags);
-
-            if (!hasUserManuallySelectedRef.current && finalLocalWithSyncFlags.length > 0) {
-              handleSelectVideo(finalLocalWithSyncFlags[0], false, false);
-            }
-
-            // --- SMART AUTO BACKGROUND RE-SYNC ---
-            // Only upload items that have never been synced (synced is false or undefined)
-            const localOnlyToUpload = finalLocalWithSyncFlags.filter(v => v.isCustom && !(v as any).synced);
-            
-            if (localOnlyToUpload.length > 0) {
-              console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced videos. Restoring...`);
-              localOnlyToUpload.forEach(async (item) => {
-                try {
-                  const updatedItem = { ...item, synced: true };
-                  await setDoc(doc(db, 'officialVideos', String(item.id)), updatedItem);
-                  await uploadToFallbackServer('official_video', item.title, item.description || '', updatedItem);
-                  console.log(`[Auto-Sync] Restored video:`, item.id);
-                } catch (err) {
-                  console.warn('[Auto-Sync] Failed to restore video:', item.id, err);
-                }
-              });
-            }
-          });
-        },
-        (err) => {
-          console.warn('Firestore officialVideos snapshot notice:', err);
-          if (typeof (window as any).showFirestoreError === 'function') {
-            (window as any).showFirestoreError(`officialVideos read failed: ${err.message || err}`);
-          }
-        }
-      );
-
-      // PostgreSQL Hybrid Sync Fallback
-      fetchFromFallbackServer<VideoItem>('official_video').then((sqlVideos) => {
-        if (sqlVideos && sqlVideos.length > 0) {
-          loadPersistentItems<VideoItem>(LOCAL_STORAGE_KEY).then((local) => {
-            const merged = mergeItemsWithLocal(sqlVideos, local);
-            merged.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
-            setCustomVideos(merged);
-            savePersistentItems(LOCAL_STORAGE_KEY, merged);
-
-            if (!hasUserManuallySelectedRef.current && merged.length > 0) {
-              handleSelectVideo(merged[0], false, false);
-            }
-          });
-        }
-      }).catch(err => console.warn('Videos SQL fallback load notice:', err));
-
-      // WebSocket (Socket.IO) Real-time sync (Facebook/YouTube style)
-      const handleRemoteItem = (data: any) => {
-        if (data && data.category === 'official_video' && data.item) {
-          console.log('[WebSocket] Real-time official video received:', data.item);
-          loadPersistentItems<VideoItem>(LOCAL_STORAGE_KEY).then((local) => {
-            if (local.some((v) => v.id === data.item.id)) return;
-            const updated = [data.item, ...local];
-            updated.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
-            setCustomVideos(updated);
-            savePersistentItems(LOCAL_STORAGE_KEY, updated);
-
-            if (!hasUserManuallySelectedRef.current && updated.length > 0) {
-              handleSelectVideo(updated[0], false, false);
-            }
-          });
-        }
-      };
-
-      if (socket) {
-        socket.on('item_uploaded', handleRemoteItem);
-      }
-
-      return () => {
-        unsub();
-        if (socket) {
-          socket.off('item_uploaded', handleRemoteItem);
-        }
-      };
-    } catch (e: any) {
-      console.warn('Firestore officialVideos listener notice:', e);
-      if (typeof (window as any).showFirestoreError === 'function') {
-        (window as any).showFirestoreError(`officialVideos listener failed: ${e.message || e}`);
-      }
-    }
+    return () => unsub();
   }, []);
 
+  // Sync Member Videos from Firestore in Real-Time with persistent load merging
   useEffect(() => {
-    // Load Elfsight platform script safely for auto-sync YouTube widget
-    try {
-      const existingScript = document.querySelector('script[src="https://elfsightcdn.com/platform.js"]');
-      if (!existingScript) {
-        const script = document.createElement('script');
-        script.src = 'https://elfsightcdn.com/platform.js';
-        script.async = true;
-        script.crossOrigin = 'anonymous';
-        script.onerror = () => {
-          // Gracefully ignore third-party network blocking
-        };
-        document.body.appendChild(script);
-      } else {
-        try {
-          if ((window as any).eapps?.reinitialize) {
-            (window as any).eapps.reinitialize();
-          }
-        } catch {
-          // Safe fallback
-        }
+    loadPersistentItems<MemberVideoItem>(MEMBER_STORAGE_KEY).then((saved) => {
+      if (saved && saved.length > 0) {
+        setMemberVideos(saved);
       }
-    } catch {}
+    });
+
+    const unsub = onSnapshot(collection(db, 'memberVideos'), (snapshot) => {
+      const firestoreList: MemberVideoItem[] = [];
+      snapshot.forEach((docSnap) => {
+        firestoreList.push({
+          ...(docSnap.data() as MemberVideoItem),
+          id: docSnap.id,
+        });
+      });
+
+      // Smart Real-time Merge (Always preserves the 1 default sodosoo video + any cloud uploads)
+      const merged = [
+        ...firestoreList,
+        ...DEFAULT_MEMBER_VIDEOS_1.filter((init) => !firestoreList.some((f) => f.id === init.id))
+      ];
+
+      const sorted = merged.sort((a, b) => getTimestamp(b) - getTimestamp(a));
+      setMemberVideos(sorted);
+      savePersistentItems(MEMBER_STORAGE_KEY, sorted);
+    }, (err) => {
+      console.warn('Firestore memberVideos notice:', err);
+    });
+
+    return () => unsub();
   }, []);
 
-  const saveCustomVideos = (items: VideoItem[]) => {
-    setCustomVideos(items);
-    savePersistentItems(LOCAL_STORAGE_KEY, items);
+  // Combine Official & Member Videos into a unified feed
+  const unifiedFeed: UnifiedVideoCardItem[] = React.useMemo(() => {
+    const list: UnifiedVideoCardItem[] = [];
+
+    // Official Club Videos
+    officialVideos.forEach((v) => {
+      let vType: UnifiedVideoCardItem['videoType'] = 'youtube';
+      if (v.videoType === 'local' || Boolean(v.videoFileUrl)) {
+        vType = 'local';
+      } else if (v.youtubeUrl && isFacebookVideoUrl(v.youtubeUrl)) {
+        vType = 'facebook';
+      }
+
+      list.push({
+        id: v.id,
+        title: v.title,
+        description: v.description || '১১ স্টার ক্লাবের অফিসিয়াল পরিবেশনা।',
+        sourceType: 'official',
+        category: v.category || 'puja',
+        videoType: vType,
+        youtubeId: v.youtubeId,
+        youtubeUrl: v.youtubeUrl,
+        videoFileUrl: v.videoFileUrl,
+        thumbnailUrl: v.thumbnailUrl || (v.youtubeId ? `https://img.youtube.com/vi/${v.youtubeId}/hqdefault.jpg` : undefined),
+        authorName: 'অ্যাডমিন (১১ স্টার ক্লাব)',
+        authorRole: 'অফিসিয়াল পাবলিশার',
+        duration: v.duration || 'ভিডিও',
+        tag: v.tag || 'অফিসিয়াল',
+        likesCount: likesMap[v.id] || 15,
+        dateAdded: 'অফিসিয়াল ভিডিও',
+        createdAt: getTimestamp(v),
+        uploaderDeviceId: v.uploaderDeviceId,
+        isCustom: v.isCustom
+      });
+    });
+
+    // Member Submitted Videos
+    memberVideos.forEach((m) => {
+      let vType: UnifiedVideoCardItem['videoType'] = 'youtube';
+      if (m.videoType === 'local' || Boolean(m.videoFileUrl)) {
+        vType = 'local';
+      } else if (m.youtubeUrl && isFacebookVideoUrl(m.youtubeUrl)) {
+        vType = 'facebook';
+      }
+
+      list.push({
+        id: m.id,
+        title: m.title,
+        description: m.description || 'ক্লাব সদস্যের শেয়ার করা স্মরণীয় ভিডিও।',
+        sourceType: 'member',
+        category: m.category || 'puja',
+        videoType: vType,
+        youtubeId: m.youtubeId !== 'local-member-video' ? m.youtubeId : undefined,
+        youtubeUrl: m.youtubeUrl,
+        videoFileUrl: m.videoFileUrl,
+        thumbnailUrl: m.thumbnailUrl || (m.youtubeId && m.youtubeId !== 'local-member-video' ? `https://img.youtube.com/vi/${m.youtubeId}/hqdefault.jpg` : undefined),
+        authorName: m.authorName || 'ক্লাব সদস্য',
+        authorRole: m.authorRole || 'সদস্য',
+        duration: m.duration || 'সদস্য ভিডিও',
+        tag: 'সদস্য কর্নার',
+        likesCount: (likesMap[m.id] || m.likes || 8),
+        dateAdded: m.dateAdded || 'সাম্প্রতিক',
+        createdAt: getTimestamp(m),
+        uploaderDeviceId: m.uploaderDeviceId,
+        isCustom: m.isCustom
+      });
+    });
+
+    return list.sort((a, b) => b.createdAt - a.createdAt);
+  }, [officialVideos, memberVideos, likesMap]);
+
+  // Filtered List
+  const filteredFeed = React.useMemo(() => {
+    if (activeTab === 'official') return unifiedFeed.filter((item) => item.sourceType === 'official');
+    if (activeTab === 'member') return unifiedFeed.filter((item) => item.sourceType === 'member');
+    return unifiedFeed;
+  }, [unifiedFeed, activeTab]);
+
+  // Handle Official Video Upload Request (Requires Admin Authentication)
+  const handleRequestOfficialUpload = () => {
+    setIsAdminUploadAuthOpen(true);
   };
 
+  // On Admin Upload Password Authenticated
+  const handleAdminUploadAuthSuccess = () => {
+    setIsAdminUploadAuthOpen(false);
+    setIsAddOfficialOpen(true);
+  };
+
+  // Add Official Video Handler
   const handleAddOfficialVideo = async (newVideo: VideoItem) => {
-    const videoWithTime: VideoItem = {
-      ...newVideo,
-      createdAt: newVideo.createdAt || Date.now(),
-      synced: false
-    };
-    const updated = [videoWithTime, ...customVideos.filter((v) => v.id !== videoWithTime.id)];
-    updated.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
-    saveCustomVideos(updated);
-    
-    // Immediately set and focus on the newly uploaded video
-    hasUserManuallySelectedRef.current = false;
-    await handleSelectVideo(videoWithTime, true, true);
+    const updated = [newVideo, ...officialVideos.filter((v) => v.id !== newVideo.id)];
+    setOfficialVideos(updated);
+    savePersistentItems(OFFICIAL_STORAGE_KEY, updated);
 
-    // Save to Firestore
     try {
-      await setDoc(doc(db, 'officialVideos', videoWithTime.id), {
-        ...videoWithTime,
-        videoFileUrl: videoWithTime.videoFileUrl?.startsWith('blob:') ? '' : videoWithTime.videoFileUrl,
-        createdAt: videoWithTime.createdAt
-      });
-    } catch (err: any) {
-      console.warn('Firestore officialVideos write fallback:', err);
-      if (typeof (window as any).showFirestoreError === 'function') {
-        (window as any).showFirestoreError(`officialVideos save failed: ${err.message || err}`);
-      }
+      await setDoc(doc(db, 'officialVideos', newVideo.id), newVideo);
+    } catch (e) {
+      console.warn('Firestore official video sync error:', e);
     }
 
-    // PostgreSQL backup upload for 100% resilient cross-device syncing
+    // Corrected Notification call with correct parameters (Point 3)
     try {
-      await uploadToFallbackServer('official_video', videoWithTime.title, videoWithTime.description || '', videoWithTime);
-    } catch (sqlErr) {
-      console.warn('SQL fallback upload notice for official video:', sqlErr);
-    }
-
-    if (socket) {
-      socket.emit('upload_item', { category: 'official_video', item: videoWithTime });
-    }
-
-    // Send notification
-    try {
-      await sendAppNotification(
-        'নতুন ভিডিও যোগ করা হয়েছে!',
-        `অফিসিয়াল ভিডিও: ${videoWithTime.title}`,
+      sendAppNotification(
+        '🎬 নতুন অফিসিয়াল ভিডিও প্রকাশিত হয়েছে!',
+        `"${newVideo.title}" ১১ স্টার ক্লাবের অফিশিয়াল ভিডিও গ্যালারিতে যোগ করা হয়েছে।`,
         'media',
         'videos'
       );
-    } catch {}
+    } catch (err) {
+      console.warn('App notification error:', err);
+    }
   };
 
-  const handlePromptDeleteOfficialVideo = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    setVideoToDeleteId(id);
+  // Add Member Video Handler
+  const handleAddMemberVideo = async (newVideo: MemberVideoItem) => {
+    const updated = [newVideo, ...memberVideos.filter((m) => m.id !== newVideo.id)];
+    setMemberVideos(updated);
+    savePersistentItems(MEMBER_STORAGE_KEY, updated);
+
+    try {
+      await setDoc(doc(db, 'memberVideos', newVideo.id), newVideo);
+    } catch (e) {
+      console.warn('Firestore member video sync error:', e);
+    }
+
+    // Corrected Notification call with correct parameters (Point 3)
+    try {
+      sendAppNotification(
+        '📹 নতুন সদস্য ভিডিও যোগ হয়েছে!',
+        `${newVideo.authorName} একটি নতুন সুন্দর ভিডিও শেয়ার করেছেন: "${newVideo.title}"`,
+        'media',
+        'videos'
+      );
+    } catch (err) {
+      console.warn('App notification error:', err);
+    }
+  };
+
+  // Smart Deletion Trigger Logic:
+  // - Prompt Admin Passcode Auth PIN (Ayan@2024).
+  const promptDeleteVideo = (item: UnifiedVideoCardItem) => {
+    setItemToDelete(item);
     setIsDeleteAuthOpen(true);
   };
 
-  const handleConfirmDeleteOfficialVideo = async () => {
-    if (!videoToDeleteId) return;
-    const id = videoToDeleteId;
-    const updated = customVideos.filter((v) => v.id !== id);
-    saveCustomVideos(updated);
-
-    try {
-      await deleteDoc(doc(db, 'officialVideos', id));
-    } catch (err) {
-      console.warn('Firestore officialVideos delete fallback:', err);
+  // Execute Deletion
+  const executeDelete = async (item: UnifiedVideoCardItem) => {
+    if (item.sourceType === 'official') {
+      const updated = officialVideos.filter((v) => v.id !== item.id);
+      setOfficialVideos(updated);
+      savePersistentItems(OFFICIAL_STORAGE_KEY, updated);
+      try {
+        await deleteDoc(doc(db, 'officialVideos', item.id));
+      } catch (e) {}
+    } else {
+      const updated = memberVideos.filter((m) => m.id !== item.id);
+      setMemberVideos(updated);
+      savePersistentItems(MEMBER_STORAGE_KEY, updated);
+      try {
+        await deleteDoc(doc(db, 'memberVideos', item.id));
+      } catch (e) {}
     }
 
     try {
-      await deleteVideoBlob(id);
-    } catch (err) {
-      console.warn('Failed to delete blob from IndexedDB:', err);
-    }
-    if (activeVideoId === id) {
-      const fallback = updated[0] || FEATURED_VIDEOS[0];
-      if (fallback) {
-        handleSelectVideo(fallback, false, false);
-      }
-    }
-    setVideoToDeleteId(null);
+      await deleteVideoBlob(item.id);
+    } catch (e) {}
+
+    setItemToDelete(null);
     setIsDeleteAuthOpen(false);
   };
 
-  const handleOpenAdminAddVideo = () => {
-    // Always prompt for password every time
-    setIsAdminAuthOpen(true);
+  // Toggle Like
+  const handleToggleLike = (id: string) => {
+    const isLiked = userLikedMap[id];
+    const newLikedState = !isLiked;
+    const newMap = { ...userLikedMap, [id]: newLikedState };
+    setUserLikedMap(newMap);
+    try {
+      localStorage.setItem(LIKES_STORAGE_KEY, JSON.stringify(newMap));
+    } catch (e) {}
+
+    setLikesMap((prev) => ({
+      ...prev,
+      [id]: (prev[id] || 12) + (newLikedState ? 1 : -1)
+    }));
   };
 
-  const scrollToMemberSection = () => {
-    const el = document.getElementById('member-community-videos');
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth' });
-    }
+  // Share
+  const handleShareVideo = (item: UnifiedVideoCardItem) => {
+    copyTextToClipboard(window.location.href);
+    setCopiedId(item.id);
+    setTimeout(() => setCopiedId(null), 2500);
   };
-
-  // Combine custom official videos (sorted newest-first) + default official videos
-  const allOfficialVideos: VideoItem[] = [...customVideos, ...FEATURED_VIDEOS];
-
-  const handleSelectVideo = async (
-    video: VideoItem,
-    isManualClick: boolean = true,
-    shouldScroll: boolean = true
-  ) => {
-    if (isManualClick) {
-      hasUserManuallySelectedRef.current = true;
-      broadcastMediaPlaybackStarted(`video-player-${video.id || video.youtubeId}`, 'video');
-    }
-    const isLocal = video.videoType === 'local' || Boolean(video.videoFileUrl);
-    setActiveVideoType(isLocal ? 'local' : 'youtube');
-    setActiveVideoId(video.youtubeId || video.id);
-    setActiveVideoTitle(video.title);
-    setActiveVideoDesc(video.description);
-    setActiveVideoDuration(video.duration || 'চলমান ভিডিও');
-    setActiveVideoTag(video.tag || '');
-
-    if (isLocal) {
-      if (video.videoFileUrl && !video.videoFileUrl.startsWith('blob:')) {
-        setActiveVideoFileUrl(getPublicMediaUrl(video.videoFileUrl));
-      } else {
-        try {
-          const storedBlob = await getVideoBlob(video.id);
-          if (storedBlob) {
-            if (typeof storedBlob === 'string' && !storedBlob.startsWith('blob:')) {
-              setActiveVideoFileUrl(getPublicMediaUrl(storedBlob));
-            } else if (storedBlob instanceof Blob) {
-              const freshBlobUrl = URL.createObjectURL(storedBlob);
-              setActiveVideoFileUrl(freshBlobUrl);
-            }
-          } else if (video.videoFileUrl && !video.videoFileUrl.startsWith('blob:')) {
-            setActiveVideoFileUrl(getPublicMediaUrl(video.videoFileUrl));
-          }
-        } catch {
-          if (video.videoFileUrl && !video.videoFileUrl.startsWith('blob:')) {
-            setActiveVideoFileUrl(getPublicMediaUrl(video.videoFileUrl));
-          }
-        }
-      }
-    } else {
-      setActiveVideoFileUrl('');
-    }
-
-    if (shouldScroll && playerRef.current) {
-      playerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  };
-
-  const handleShare = async () => {
-    const url = activeVideoType === 'youtube'
-      ? `https://www.youtube.com/watch?v=${activeVideoId}`
-      : window.location.href;
-    await copyTextToClipboard(url);
-    setCopiedLink(true);
-    setTimeout(() => setCopiedLink(false), 2000);
-  };
-
-  const filteredVideos = selectedFilter === 'all'
-    ? allOfficialVideos
-    : allOfficialVideos.filter((v) => v.category === selectedFilter);
 
   return (
-    <div className="pt-24 sm:pt-28 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-12">
-      {/* Header Banner */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="text-center space-y-4 max-w-3xl mx-auto"
-      >
-        <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-red-600/15 border border-red-500/30 text-red-300 text-xs sm:text-sm font-semibold shadow-[0_0_20px_rgba(239,68,68,0.2)]">
-          <Radio className="w-4 h-4 text-red-500 animate-pulse" />
-          <span>অফিসিয়াল ও মেম্বার্স ভিডিও প্ল্যাটফর্ম</span>
-          <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-        </div>
-
-        <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold font-serif-bengali text-gold-gradient">
-          ভিডিও ও লাইভ সম্প্রচার
-        </h1>
-
-        <p className="text-sm sm:text-base text-stone-300 max-w-2xl mx-auto leading-relaxed">
-          11 স্টার ক্লাবের সার্বজনীন শারদীয়া দুর্গোৎসবের লাইভ সম্প্রচার, নাট্যানুষ্ঠান ও ভিডিও সংকলন — আলাদা ট্যাবে না গিয়ে এই পেজেই সরাসরি উপভোগ করুন। ক্লাব সদস্য ও অ্যাডমিনরা সরাসরি নতুন ভিডিও যোগ ও পরিচালনা করতে পারেন।
-        </p>
-
-        {/* Action Controls: Admin Add Video & Member Section Button */}
-        <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
-          <button
-            onClick={handleOpenAdminAddVideo}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-400 hover:to-amber-500 text-black font-bold text-xs sm:text-sm shadow-[0_0_25px_rgba(245,158,11,0.35)] transition-all hover:scale-105 active:scale-95"
-            title="শুধুমাত্র ক্লাব অ্যাডমিনদের জন্য পাসওয়ার্ড সুরক্ষিত"
+    <div className="min-h-screen pb-24 text-stone-100 font-bengali">
+      {/* Top Banner Header */}
+      <section className="relative py-12 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-stone-950 via-red-950/30 to-stone-950 border-b border-amber-500/20">
+        <div className="max-w-6xl mx-auto text-center space-y-4">
+          <motion.div
+            initial={{ opacity: 0, y: -15 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-500/20 via-red-500/20 to-amber-500/20 border border-amber-500/40 text-amber-300 text-xs sm:text-sm font-bold shadow-lg"
           >
-            <Lock className="w-4 h-4" />
-            <span>নতুন অফিসিয়াল ভিডিও যোগ করুন (অ্যাডমিন লক)</span>
-          </button>
+            <Sparkles className="w-4 h-4 text-amber-400 animate-pulse" />
+            <span>{CLUB_INFO.nameBn} • ভিডিও ও মিডিয়া গ্যালারি</span>
+          </motion.div>
 
-          <button
-            onClick={scrollToMemberSection}
-            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/40 text-emerald-300 font-bold text-xs sm:text-sm transition-all hover:scale-105 active:scale-95 shadow-[0_0_20px_rgba(16,185,129,0.2)]"
-          >
-            <Users className="w-4 h-4 text-emerald-400" />
-            <span>সদস্যদের ভিডিও কর্নার ➔</span>
-          </button>
+          <h1 className="text-3xl sm:text-5xl font-extrabold font-serif-bengali text-transparent bg-clip-text bg-gradient-to-r from-amber-100 via-amber-300 to-amber-500">
+            ভিডিও গ্যালারি ও সরাসরি সম্প্রচার
+          </h1>
 
-          <a
-            href={CLUB_INFO.youtubeChannelUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => {
-              e.preventDefault();
-              window.open(CLUB_INFO.youtubeChannelUrl, '_blank', 'noopener,noreferrer');
-            }}
-            className="px-5 py-2.5 rounded-full bg-red-600 hover:bg-red-500 text-white font-bold text-xs sm:text-sm transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:scale-105 active:scale-95 flex items-center gap-2"
-          >
-            <Youtube className="w-4 h-4 fill-white" />
-            <span>YouTube চ্যানেল</span>
-            <ExternalLink className="w-3.5 h-3.5" />
-          </a>
-        </div>
-      </motion.div>
+          <p className="max-w-2xl mx-auto text-stone-300 text-sm sm:text-base leading-relaxed">
+            ১১ স্টার ক্লাবের অফিশিয়াল দুর্গোৎসব, সাংস্কৃতিক পরিবেশনা এবং সম্মানীয় সদস্যদের শেয়ার করা ভিডিও পৃথিবীর যেকোনো প্রান্তে বসেই উপভোগ করুন।
+          </p>
 
-      {/* 1. Main Interactive In-Page Theater Player */}
-      <section ref={playerRef} id="main-video-player" className="space-y-6">
-        <div className="rounded-3xl glass-card border border-amber-500/35 p-4 sm:p-7 relative overflow-hidden gold-glow shadow-2xl">
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4 border-b border-amber-500/20 pb-4 mb-5">
-            <div className="flex items-center gap-3">
-              <div className="p-2.5 rounded-xl bg-red-600/20 text-red-400 border border-red-500/40">
-                <Tv className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  {activeVideoDuration?.includes('লাইভ') && (
-                    <span className="flex h-2.5 w-2.5 relative">
-                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-                      <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-red-600"></span>
-                    </span>
-                  )}
-                  <span className={`text-xs font-bold uppercase tracking-wider ${activeVideoDuration?.includes('লাইভ') ? 'text-red-400' : 'text-amber-300'}`}>
-                    {activeVideoDuration}
-                  </span>
-                  {activeVideoTag && (
-                    <span className="px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-[10px] font-semibold border border-amber-500/30">
-                      {activeVideoTag}
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-lg sm:text-xl font-bold font-serif-bengali text-white mt-0.5">
-                  {activeVideoTitle}
-                </h3>
-              </div>
-            </div>
+          {/* Action Buttons with Corrected (সদস্যের) Label Removal (Point 2) */}
+          <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={handleRequestOfficialUpload}
+              className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-amber-500 via-amber-600 to-yellow-500 text-black font-bold text-xs sm:text-sm shadow-[0_0_20px_rgba(245,158,11,0.3)] hover:scale-105 active:scale-95 transition-all flex items-center gap-2 border border-amber-300/40"
+            >
+              <Plus className="w-4 h-4 stroke-[3]" />
+              <span>অফিসিয়াল ভিডিও আপলোড (অ্যাডমিন)</span>
+            </button>
 
-            <div className="flex items-center gap-2 self-end lg:self-auto">
-              <button
-                onClick={handleShare}
-                className="px-3.5 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-xs font-semibold text-stone-200 flex items-center gap-1.5 transition-all"
-                title="ভিডিও লিংক কপি করুন"
-              >
-                {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Share2 className="w-3.5 h-3.5 text-amber-400" />}
-                <span>{copiedLink ? 'কপি হয়েছে!' : 'শেয়ার লিংক'}</span>
-              </button>
-
-              {activeVideoType === 'youtube' && activeVideoId && activeVideoId !== 'local-video' && (
-                <a
-                  href={`https://www.youtube.com/watch?v=${activeVideoId}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3.5 py-2 rounded-xl bg-red-600/20 hover:bg-red-600/40 border border-red-500/40 text-xs font-bold text-red-200 flex items-center gap-1.5 transition-all"
-                  title="প্রয়োজনে ইউটিউবে দেখুন"
-                >
-                  <span>YouTube</span>
-                  <ExternalLink className="w-3.5 h-3.5" />
-                </a>
-              )}
-            </div>
-          </div>
-
-          {/* Unified Video Player - Plays both local gallery video and YouTube directly on this page */}
-          <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black border border-amber-500/30 shadow-inner flex items-center justify-center">
-            {activeVideoType === 'local' || !activeVideoId || activeVideoId.startsWith('custom-') || activeVideoId.startsWith('local-') || activeVideoId.startsWith('member-') ? (
-              (() => {
-                const matchedVideo = allOfficialVideos.find(v => String(v.id) === String(activeVideoId));
-                const resolvedUrl = activeVideoFileUrl || (matchedVideo?.videoFileUrl ? getPublicMediaUrl(matchedVideo.videoFileUrl) : '');
-                if (resolvedUrl) {
-                  return (
-                    <video
-                      ref={localVideoRef}
-                      key={resolvedUrl}
-                      src={resolvedUrl}
-                      controls
-                      playsInline
-                      className="w-full h-full object-contain bg-black"
-                    />
-                  );
-                }
-                return (
-                  <div className="flex flex-col items-center justify-center p-6 text-center space-y-2 text-stone-300">
-                    <Tv className="w-10 h-10 text-amber-400 animate-pulse" />
-                    <p className="text-sm font-bold font-serif-bengali">ভিডিও লোড হচ্ছে...</p>
-                  </div>
-                );
-              })()
-            ) : (
-              <iframe
-                key={activeVideoId}
-                src={`https://www.youtube-nocookie.com/embed/${activeVideoId}?autoplay=0&rel=0&modestbranding=1&playsinline=1`}
-                title={activeVideoTitle}
-                allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-                allowFullScreen
-                className="w-full h-full border-0"
-              />
-            )}
-          </div>
-
-          {/* Video Description & Information */}
-          <div className="mt-4 p-4 rounded-2xl bg-black/40 border border-white/5 flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs sm:text-sm text-stone-300">
-            <div className="space-y-1">
-              <p className="font-medium text-stone-200">{activeVideoDesc}</p>
-              <p className="text-amber-300/80 text-xs">
-                📍 স্থান: 11 স্টার ক্লাব, খুকুড়দহ আড়খানা, পশ্চিম মেদিনীপুর | {activeVideoType === 'local' ? 'অফিসিয়াল গ্যালারি ভিডিও' : '@devimahamaya11starclub'}
-              </p>
-            </div>
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-xs font-bold flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
-                <span>{activeVideoType === 'local' ? 'গ্যালারি ভিডিও প্লে হচ্ছে' : 'এখানেই প্লে হচ্ছে'}</span>
-              </span>
-            </div>
+            <button
+              onClick={() => setIsAddMemberOpen(true)}
+              className="px-5 py-2.5 rounded-2xl bg-stone-900 hover:bg-stone-800 text-amber-300 border border-amber-500/40 text-xs sm:text-sm font-bold shadow-md hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+            >
+              <Video className="w-4 h-4 text-amber-400" />
+              <span>আপনার ভিডিও পোস্ট করুন</span>
+            </button>
           </div>
         </div>
       </section>
 
-      {/* 2. Official Channel Feed & Videos Collection (In-Page Click & Play) */}
-      <section className="space-y-6">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-white/10 pb-4">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 uppercase tracking-wider">
-              <Flame className="w-4 h-4 text-amber-400" />
-              <span>অফিসিয়াল ভিডিও তালিকা (ইন-পেজ প্লেয়ার)</span>
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 mt-8 space-y-8">
+        {/* Authentic Official Social Media Channels Banner */}
+        <div className="p-6 rounded-3xl bg-gradient-to-r from-stone-900/90 via-zinc-900/90 to-stone-900/90 border border-amber-500/30 shadow-2xl relative overflow-hidden">
+          <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 text-xs font-bold text-red-400 uppercase tracking-wider">
+                <Radio className="w-4 h-4 text-red-500 animate-pulse" />
+                <span>অফিসিয়াল সোশ্যাল মিডিয়া চ্যানেল ও সরাসরি সম্প্রচার</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold font-serif-bengali text-amber-200">
+                ১১ স্টার ক্লাবের অফিসিয়াল প্ল্যাটফর্মসমূহ
+              </h2>
+              <p className="text-xs sm:text-sm text-stone-300">
+                আমাদের অফিশিয়াল সোশ্যাল চ্যানেলগুলিতে যুক্ত থাকুন ও দুর্গোৎসব ও ক্লাব কার্যক্রম সরাসরি দেখুন।
+              </p>
             </div>
-            <h3 className="text-xl sm:text-2xl font-bold font-serif-bengali text-gold-gradient">
-              সমস্ত অফিসিয়াল ভিডিও ও লাইভ ({filteredVideos.length}টি ভিডিও)
-            </h3>
-            <p className="text-stone-400 text-xs mt-0.5">
-              যেকোনো ভিডিও কার্ডে ক্লিক করলে সরাসরি উপরের প্রধান প্লেয়ারে চালু হবে।
-            </p>
-          </div>
 
-          {/* Filter Tabs & Admin Add Button */}
-          <div className="flex flex-wrap items-center gap-2">
-            {[
-              { id: 'all', label: `সব ভিডিও (${allOfficialVideos.length})` },
-              { id: 'puja', label: '🪔 দুর্গোৎসব ও পূজার মুহূর্ত' },
-              { id: 'work', label: '🔨 মণ্ডপসজ্জা ও প্রস্তুতি পর্ব' },
-              { id: 'plantation', label: '🌱 বৃক্ষরোপণ ও পরিবেশ সচেতনতা' },
-              { id: 'social', label: '❤️ রক্তদান ও সমাজসেবা' },
-              { id: 'cultural', label: '🎨 সাংস্কৃতিক অনুষ্ঠান' },
-              { id: 'memories', label: '👥 বন্ধু আড্ডা ও ক্লাবের স্মৃতি' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setSelectedFilter(tab.id as any)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                  selectedFilter === tab.id
-                    ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-black font-bold shadow-[0_0_12px_rgba(245,158,11,0.4)] scale-105'
-                    : 'bg-white/5 text-stone-300 hover:bg-white/10 border border-white/10 hover:border-amber-500/30'
-                }`}
+            {/* Official Authentic Links */}
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5 w-full md:w-auto">
+              <a
+                href={CLUB_INFO.youtubeChannelUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-2.5 rounded-xl bg-red-600/90 hover:bg-red-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md hover:scale-105 transition-all"
               >
-                {tab.label}
-              </button>
-            ))}
+                <Youtube className="w-4 h-4" />
+                <span>YouTube</span>
+                <ExternalLink className="w-3 h-3 opacity-70" />
+              </a>
+
+              <a
+                href={CLUB_INFO.facebookUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-2.5 rounded-xl bg-blue-600/90 hover:bg-blue-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md hover:scale-105 transition-all"
+              >
+                <Globe className="w-4 h-4" />
+                <span>Facebook</span>
+                <ExternalLink className="w-3 h-3 opacity-70" />
+              </a>
+
+              <a
+                href={CLUB_INFO.whatsappChannelUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-2.5 rounded-xl bg-emerald-600/90 hover:bg-emerald-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md hover:scale-105 transition-all"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>WhatsApp</span>
+                <ExternalLink className="w-3 h-3 opacity-70" />
+              </a>
+
+              <a
+                href={CLUB_INFO.instagramUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-3.5 py-2.5 rounded-xl bg-gradient-to-r from-pink-600 to-purple-600 text-white text-xs font-bold flex items-center justify-center gap-1.5 shadow-md hover:scale-105 transition-all"
+              >
+                <Instagram className="w-4 h-4" />
+                <span>Instagram</span>
+                <ExternalLink className="w-3 h-3 opacity-70" />
+              </a>
+            </div>
+          </div>
+        </div>
+
+        {/* Filter Tabs */}
+        <div className="flex items-center justify-between border-b border-amber-500/20 pb-4 overflow-x-auto gap-2">
+          <div className="flex items-center gap-2 min-w-max">
+            <button
+              onClick={() => setActiveTab('all')}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'all'
+                  ? 'bg-amber-500 text-stone-950 shadow-md scale-105'
+                  : 'bg-stone-900/80 text-stone-300 hover:text-amber-300 border border-amber-500/20'
+              }`}
+            >
+              <Film className="w-4 h-4" />
+              <span>সব ভিডিও ({unifiedFeed.length})</span>
+            </button>
 
             <button
-              onClick={handleOpenAdminAddVideo}
-              className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold flex items-center gap-1.5 transition-colors"
-              title="অ্যাডমিন দ্বারা অফিসিয়াল ভিডিও যোগ করুন"
+              onClick={() => setActiveTab('official')}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'official'
+                  ? 'bg-amber-500 text-stone-950 shadow-md scale-105'
+                  : 'bg-stone-900/80 text-stone-300 hover:text-amber-300 border border-amber-500/20'
+              }`}
             >
-              <Plus className="w-3.5 h-3.5" />
-              <span>অফিসিয়াল ভিডিও যোগ</span>
+              <Tv className="w-4 h-4" />
+              <span>অফিসিয়াল ভিডিও (অ্যাডমিন) ({officialVideos.length})</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('member')}
+              className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 ${
+                activeTab === 'member'
+                  ? 'bg-amber-500 text-stone-950 shadow-md scale-105'
+                  : 'bg-stone-900/80 text-stone-300 hover:text-amber-300 border border-amber-500/20'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>সদস্যদের ভিডিও (সদস্য কর্নার) ({memberVideos.length})</span>
             </button>
           </div>
         </div>
 
-        {/* Video Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-          {filteredVideos.map((video, idx) => {
-            const isPlaying = (video.youtubeId && activeVideoId === video.youtubeId) || activeVideoId === video.id;
-            return (
-              <motion.div
-                key={video.id}
-                initial={{ opacity: 0, y: 15 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.25, delay: idx * 0.05 }}
-                onClick={() => handleSelectVideo(video)}
-                className={`group relative cursor-pointer overflow-hidden rounded-2xl border transition-all duration-300 flex flex-col justify-between ${
-                  isPlaying
-                    ? 'border-amber-400 bg-amber-950/30 ring-2 ring-amber-500/60 shadow-[0_0_25px_rgba(245,158,11,0.35)] scale-[1.02]'
-                    : 'border-amber-500/25 bg-black/60 hover:border-amber-400 hover:scale-[1.02] hover:shadow-lg'
-                }`}
-              >
-                {/* Thumbnail Container */}
-                <div className="relative aspect-video w-full overflow-hidden bg-black flex items-center justify-center">
-                  <img
-                    src={
-                      video.thumbnailUrl ||
-                      (video.youtubeId && video.youtubeId !== 'local-video'
-                        ? `https://img.youtube.com/vi/${video.youtubeId}/hqdefault.jpg`
-                        : CLUB_INFO.images.heroDurga)
-                    }
-                    alt={video.title}
-                    referrerPolicy="no-referrer"
-                    className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                    onError={(e) => {
-                      e.currentTarget.src = CLUB_INFO.images.heroDurga;
-                    }}
-                  />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30" />
-
-                  {/* Play Button Overlay */}
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div
-                      className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
-                        isPlaying
-                          ? 'bg-amber-500 text-black scale-110 shadow-lg'
-                          : 'bg-black/75 text-amber-300 group-hover:bg-amber-500 group-hover:text-black group-hover:scale-110'
-                      }`}
-                    >
-                      <Play className="w-5 h-5 fill-current ml-0.5" />
-                    </div>
-                  </div>
-
-                  {/* Top Badges */}
-                  <div className="absolute top-2.5 left-2.5 flex items-center gap-1.5">
-                    {video.videoType === 'local' ? (
-                      <span className="px-2 py-0.5 rounded bg-amber-500 text-black font-bold text-[10px] uppercase tracking-wider flex items-center gap-1 shadow">
-                        <FileVideo className="w-3 h-3" /> গ্যালারি ভিডিও
-                      </span>
-                    ) : video.duration?.includes('লাইভ') ? (
-                      <span className="px-2 py-0.5 rounded bg-red-600/90 text-white font-bold text-[10px] uppercase tracking-wider flex items-center gap-1 shadow">
-                        <Radio className="w-2.5 h-2.5 animate-pulse" /> LIVE
-                      </span>
-                    ) : (
-                      <span className="px-2 py-0.5 rounded bg-black/80 backdrop-blur-md text-amber-300 font-semibold text-[10px] border border-amber-500/30">
-                        {video.duration || 'ভিডিও'}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Delete Button (If custom added official video - Admin only) */}
-                  {video.isCustom && (
-                    <div className="absolute top-2.5 right-2.5 flex items-center gap-1">
-                      <button
-                        onClick={(e) => handlePromptDeleteOfficialVideo(e, video.id)}
-                        title="এই অফিসিয়াল ভিডিওটি মুছে ফেলুন (অ্যাডমিন পাসওয়ার্ড আবশ্যক)"
-                        className="p-1.5 rounded-lg bg-black/75 hover:bg-red-600/90 text-stone-300 hover:text-white border border-white/10 transition-colors shadow"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-
-                  {video.tag && (
-                    <div className="absolute bottom-2 right-2">
-                      <span className="px-2 py-0.5 rounded bg-black/80 backdrop-blur-md text-[10px] font-semibold text-amber-300 border border-white/10">
-                        {video.tag}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Card Body */}
-                <div className="p-4 space-y-2 flex-1 flex flex-col justify-between">
-                  <div>
-                    <h4 className="text-xs sm:text-sm font-bold font-serif-bengali text-white line-clamp-2 leading-snug group-hover:text-amber-300 transition-colors">
-                      {video.title}
-                    </h4>
-                    <p className="text-[11px] text-stone-400 line-clamp-2 mt-1">
-                      {video.description}
-                    </p>
-                  </div>
-
-                  <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[11px]">
-                    <span
-                      className={`font-semibold flex items-center gap-1 ${
-                        isPlaying ? 'text-amber-400' : 'text-stone-300 group-hover:text-amber-300'
-                      }`}
-                    >
-                      {isPlaying ? (
-                        <>
-                          <Sparkles className="w-3 h-3 text-amber-400 animate-spin" />
-                          <span>বর্তমানে প্লে হচ্ছে</span>
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-3 h-3 fill-current text-amber-400" />
-                          <span>এখানেই চালান</span>
-                        </>
-                      )}
-                    </span>
-
-                    <span className="text-[10px] text-stone-400">
-                      {video.isCustom ? 'অ্যাডমিন আপলোড' : '11 স্টার ক্লাব'}
-                    </span>
-                  </div>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </section>
-
-      {/* 3. Community / Member Video Section */}
-      <MemberCommunityVideos />
-
-      {/* 4. Auto-Updating Live Feed Section (Auto Sync Channel Feed) */}
-      <section className="space-y-6 pt-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
-          <div>
-            <div className="flex items-center gap-2 text-xs font-semibold text-amber-400 uppercase tracking-wider">
-              <RefreshCw className="w-4 h-4 animate-spin" style={{ animationDuration: '12s' }} />
-              <span>স্বয়ংক্রিয় আপডেট চ্যানেল ফিড (Auto-Sync Updated Videos)</span>
-            </div>
-            <h3 className="text-xl sm:text-2xl font-bold font-serif-bengali text-gold-gradient">
-              ইউটিউব চ্যানেলের নতুন আপলোড ও লাইভ ফিড
-            </h3>
-            <p className="text-stone-300 text-xs mt-1">
-              ইউটিউব চ্যানেলে যেকোনো নতুন ভিডিও আপলোড হওয়ার সাথে সাথে এখানে স্বয়ংক্রিয়ভাবে আপডেট চলে আসে।
+        {/* Sequential Video Cards Feed ("পর পর ভিডিও তালিকা") */}
+        {filteredFeed.length === 0 ? (
+          <div className="p-12 text-center rounded-3xl bg-stone-900/50 border border-amber-500/20 space-y-4">
+            <Tv className="w-12 h-12 text-amber-500/40 mx-auto" />
+            <h3 className="text-lg font-bold text-amber-200">কোনো ভিডিও পাওয়া যায়নি</h3>
+            <p className="text-xs sm:text-sm text-stone-400">
+              আপনি প্রথম সদস্য হিসেবে একটি সুন্দর ভিডিও পোস্ট করতে পারেন।
             </p>
           </div>
-
-          <a
-            href={CLUB_INFO.youtubeChannelUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-xs text-red-400 hover:text-red-300 font-semibold flex items-center gap-1 bg-red-950/30 px-3 py-1.5 rounded-lg border border-red-500/30 w-fit"
-          >
-            <span>@devimahamaya11starclub</span>
-            <ExternalLink className="w-3 h-3" />
-          </a>
-        </div>
-
-        {/* Elfsight Auto-Updating YouTube Gallery Widget Container */}
-        <div className="rounded-3xl glass-card border border-amber-500/30 p-4 sm:p-6 min-h-[360px] relative overflow-hidden shadow-xl bg-black/40">
-          <div
-            className="elfsight-app-f61ac18e-a89c-4e34-bb00-5239d967a40e w-full"
-            data-elfsight-app-lazy
-          />
-        </div>
-      </section>
-
-      {/* 5. Info Card / Footer Note */}
-      <div className="p-5 rounded-2xl bg-amber-950/20 border border-amber-500/30 text-xs sm:text-sm text-stone-300 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
-        <div className="flex items-center gap-2.5">
-          <Youtube className="w-5 h-5 text-red-500 shrink-0" />
-          <span>
-            নতুন যেকোনো ভিডিও বা লাইভ স্ট্রিম আপলোড হওয়া মাত্রই এই পেজের প্লেয়ারে স্বয়ংক্রিয়ভাবে দেখার সুবিধা যুক্ত থাকে।
-          </span>
-        </div>
-        <button
-          onClick={() => {
-            if (playerRef.current) {
-              playerRef.current.scrollIntoView({ behavior: 'smooth' });
-            }
-          }}
-          className="text-xs font-bold text-amber-400 hover:underline shrink-0"
-        >
-          উপরে প্লেয়ারে যান ↑
-        </button>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {filteredFeed.map((item) => (
+              <VideoCard
+                key={item.id}
+                item={item}
+                isLiked={Boolean(userLikedMap[item.id])}
+                isCopied={copiedId === item.id}
+                isActive={activeVideoId === item.id}
+                onPlay={() => setActiveVideoId(item.id)}
+                onToggleLike={() => handleToggleLike(item.id)}
+                onShare={() => handleShareVideo(item)}
+                onDelete={() => promptDeleteVideo(item)}
+                onOpenLightbox={() => setActiveLightboxVideo(item)}
+              />
+            ))}
+          </div>
+        )}
       </div>
 
-      {/* Modals */}
-      <AdminPhotoAuthModal
-        isOpen={isAdminAuthOpen}
-        onClose={() => setIsAdminAuthOpen(false)}
-        onAuthenticated={() => {
-          setIsAdminAuthOpen(false);
-          setIsAddOfficialOpen(true);
-        }}
-        onGoToMemberSection={scrollToMemberSection}
-        actionTitle="অফিসিয়াল ভিডিও যোগ করুন"
-        description="ক্লাবের অফিসিয়াল চ্যানেলে নতুন ভিডিও যুক্ত করতে অ্যাডমিন পাসওয়ার্ড দিন। প্রতিটি আপলোডের ক্ষেত্রে অ্যাডমিন যাচাই বাধ্যতামূলক।"
-        submitButtonText="পাসওয়ার্ড যাচাই করে আপলোড করুন"
-      />
-
-      <AdminPhotoAuthModal
-        isOpen={isDeleteAuthOpen}
-        onClose={() => {
-          setIsDeleteAuthOpen(false);
-          setVideoToDeleteId(null);
-        }}
-        onAuthenticated={handleConfirmDeleteOfficialVideo}
-        actionTitle="অফিসিয়াল ভিডিও মুছে ফেলুন"
-        description="অ্যাডমিনদের আপলোড করা এই অফিসিয়াল ভিডিওটি সাধারণ সদস্যরা মুছতে পারবেন না। নিশ্চিতভাবে মুছে ফেলতে অ্যাডমিন পাসওয়ার্ড দিন।"
-        submitButtonText="পাসওয়ার্ড যাচাই করে নিশ্চিত মুছুন"
-        isDangerousAction={true}
-      />
-
+      {/* Add Official Video Modal (Admin) */}
       <AddOfficialVideoModal
         isOpen={isAddOfficialOpen}
         onClose={() => setIsAddOfficialOpen(false)}
         onAddVideo={handleAddOfficialVideo}
       />
 
-      {/* Admin Locked Club Storage Access */}
-      <div className="px-4 sm:px-6 lg:px-8 mt-12">
-        <AdminStorageAccessCard onOpenAdminStorage={onOpenAdminStorage} />
-      </div>
+      {/* Add Member Video Modal */}
+      <MemberVideoUploadModal
+        isOpen={isAddMemberOpen}
+        onClose={() => setIsAddMemberOpen(false)}
+        onAddVideo={handleAddMemberVideo}
+      />
+
+      {/* Admin Passcode Modal for Official Video Upload */}
+      <AdminPhotoAuthModal
+        isOpen={isAdminUploadAuthOpen}
+        onClose={() => setIsAdminUploadAuthOpen(false)}
+        onAuthenticated={handleAdminUploadAuthSuccess}
+      />
+
+      {/* Admin Passcode Modal for Video Deletion */}
+      <AdminPhotoAuthModal
+        isOpen={isDeleteAuthOpen}
+        onClose={() => {
+          setIsDeleteAuthOpen(false);
+          setItemToDelete(null);
+        }}
+        onAuthenticated={() => {
+          if (itemToDelete) executeDelete(itemToDelete);
+        }}
+      />
+
+      {/* Lightbox Fullscreen Video Player Modal */}
+      <AnimatePresence>
+        {activeLightboxVideo && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/90 backdrop-blur-lg overflow-y-auto"
+            onClick={() => setActiveLightboxVideo(null)}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="w-full max-w-4xl rounded-3xl bg-stone-900 border border-amber-500/40 overflow-hidden shadow-2xl my-auto space-y-4 p-4 sm:p-6 relative"
+            >
+              <div className="flex items-center justify-between border-b border-amber-500/20 pb-3">
+                <div>
+                  <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">
+                    {activeLightboxVideo.sourceType === 'official' ? 'অফিসিয়াল ভিডিও (অ্যাডমিন)' : 'সদস্য পরিবেশনা'}
+                  </span>
+                  <h3 className="text-base sm:text-xl font-bold text-white font-serif-bengali">
+                    {activeLightboxVideo.title}
+                  </h3>
+                </div>
+                <button
+                  onClick={() => setActiveLightboxVideo(null)}
+                  className="p-2 rounded-xl bg-stone-800 text-stone-300 hover:text-white"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Player Container */}
+              <div className="w-full aspect-video rounded-2xl overflow-hidden bg-black border border-stone-800 relative">
+                <VideoPlayerEngine item={activeLightboxVideo} autoPlay={true} />
+              </div>
+
+              <div className="text-xs sm:text-sm text-stone-300 leading-relaxed">
+                <p>{activeLightboxVideo.description}</p>
+                <div className="mt-3 flex items-center justify-between text-stone-400 text-xs">
+                  <span>আপলোডার: {activeLightboxVideo.authorName}</span>
+                  <span>{activeLightboxVideo.duration}</span>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
+  );
+};
+
+// Sub-Component: Individual Video Card
+interface VideoCardProps {
+  item: UnifiedVideoCardItem;
+  isLiked: boolean;
+  isCopied: boolean;
+  isActive: boolean;
+  onPlay: () => void;
+  onToggleLike: () => void;
+  onShare: () => void;
+  onDelete: () => void;
+  onOpenLightbox: () => void;
+}
+
+const VideoCard: React.FC<VideoCardProps> = ({
+  item,
+  isLiked,
+  isCopied,
+  isActive,
+  onPlay,
+  onToggleLike,
+  onShare,
+  onDelete,
+  onOpenLightbox
+}) => {
+  const isOwner = isDeviceUploader(item.uploaderDeviceId);
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 15 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-3xl bg-gradient-to-b from-stone-900/90 via-zinc-900/80 to-stone-950 border border-amber-500/30 overflow-hidden shadow-xl flex flex-col justify-between hover:border-amber-500/50 transition-all group"
+    >
+      <div className="space-y-3 p-4 sm:p-5">
+        {/* Header Badges */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span
+              className={`px-2.5 py-1 rounded-lg text-[10px] sm:text-xs font-bold uppercase tracking-wider ${
+                item.sourceType === 'official'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                  : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40'
+              }`}
+            >
+              {item.sourceType === 'official' ? 'অফিসিয়াল' : 'সদস্য ভিডিও'}
+            </span>
+
+            <span className="px-2 py-0.5 rounded-md bg-stone-800 text-stone-300 text-[10px] font-semibold">
+              {item.videoType === 'local' ? 'গ্যালারি ভিডিও' : item.videoType === 'facebook' ? 'Facebook' : 'YouTube'}
+            </span>
+          </div>
+
+          <button
+            onClick={onDelete}
+            title="ভিডিও মুছুন (অ্যাডমিন পাসকোড প্রয়োজন)"
+            className="p-1.5 rounded-lg text-stone-500 hover:text-red-400 hover:bg-red-500/10 transition-colors flex items-center gap-1 text-xs"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Video Player Engine Container with Mutual Exclusive Click-to-Play */}
+        <div className="w-full aspect-video rounded-2xl overflow-hidden bg-black border border-stone-800/80 relative">
+          {isActive ? (
+            <VideoPlayerEngine item={item} autoPlay={true} />
+          ) : (
+            <div
+              onClick={onPlay}
+              className="w-full h-full relative cursor-pointer group/player overflow-hidden"
+              title="ভিডিও প্লে করুন"
+            >
+              <img
+                src={item.thumbnailUrl || 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?w=800&auto=format&fit=crop&q=80'}
+                alt={item.title}
+                className="w-full h-full object-cover group-hover/player:scale-105 transition-transform duration-500"
+              />
+              <div className="absolute inset-0 bg-black/40 group-hover/player:bg-black/50 transition-colors flex items-center justify-center">
+                <div className="w-14 h-14 rounded-full bg-amber-500/90 group-hover/player:bg-amber-400 group-hover/player:scale-110 flex items-center justify-center text-black shadow-lg shadow-amber-500/30 transition-all duration-300">
+                  <Play className="w-6 h-6 fill-black translate-x-0.5 text-black" />
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Title & Description */}
+        <div>
+          <h3 className="text-base sm:text-lg font-bold font-serif-bengali text-stone-100 group-hover:text-amber-300 transition-colors line-clamp-2">
+            {item.title}
+          </h3>
+          <p className="text-xs text-stone-400 mt-1 line-clamp-2 leading-relaxed">
+            {item.description}
+          </p>
+        </div>
+
+        {/* Uploader Meta */}
+        <div className="pt-2 border-t border-stone-800/60 flex items-center justify-between text-xs text-stone-400">
+          <div className="flex items-center gap-1.5">
+            <Users className="w-3.5 h-3.5 text-amber-400" />
+            <span className="font-semibold text-stone-300">{item.authorName}</span>
+          </div>
+          <div className="flex items-center gap-1 text-stone-500 text-[11px]">
+            <Clock className="w-3 h-3" />
+            <span>{item.duration}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Card Footer Actions */}
+      <div className="px-4 py-3 bg-stone-950/80 border-t border-amber-500/15 flex items-center justify-between gap-2 text-xs">
+        <button
+          onClick={onToggleLike}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold transition-all ${
+            isLiked
+              ? 'bg-red-500/20 text-red-400 border border-red-500/40'
+              : 'text-stone-400 hover:text-amber-300 hover:bg-stone-900'
+          }`}
+        >
+          <Heart className={`w-4 h-4 ${isLiked ? 'fill-red-500 text-red-500' : ''}`} />
+          <span>{item.likesCount}</span>
+        </button>
+
+        <button
+          onClick={onShare}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-stone-400 hover:text-amber-300 hover:bg-stone-900 font-bold transition-all"
+        >
+          {isCopied ? <Check className="w-4 h-4 text-emerald-400" /> : <Share2 className="w-4 h-4" />}
+          <span>{isCopied ? 'কপি হয়েছে!' : 'শেয়ার'}</span>
+        </button>
+
+        <button
+          onClick={onOpenLightbox}
+          className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30 font-bold transition-all"
+        >
+          <Eye className="w-3.5 h-3.5" />
+          <span>ফুলস্ক্রিন</span>
+        </button>
+      </div>
+    </motion.div>
+  );
+};
+
+// Sub-Component: Video Player Engine with Mutual Exclusive Auto-Pause
+interface VideoPlayerEngineProps {
+  item: UnifiedVideoCardItem;
+  autoPlay?: boolean;
+}
+
+const VideoPlayerEngine: React.FC<VideoPlayerEngineProps> = ({ item, autoPlay = false }) => {
+  const [resolvedBlobUrl, setResolvedBlobUrl] = useState<string>('');
+  const [loading, setLoading] = useState<boolean>(item.videoType === 'local');
+  const [error, setError] = useState<string>('');
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  // Subscribe to mutual exclusivity media stop event
+  useEffect(() => {
+    const mediaId = `video-${item.id}`;
+    const unsub = subscribeToMediaStop(mediaId, () => {
+      if (videoRef.current && !videoRef.current.paused) {
+        try {
+          videoRef.current.pause();
+        } catch {}
+      }
+    });
+    return () => unsub();
+  }, [item.id]);
+
+  // Register HTML5 Video Element with Media Coordinator
+  useEffect(() => {
+    if (videoRef.current && (item.videoType === 'local' || resolvedBlobUrl)) {
+      const mediaId = `video-${item.id}`;
+      const unsub = registerHtmlMediaElement(videoRef.current, mediaId, 'video');
+      return () => unsub();
+    }
+  }, [item.id, item.videoType, resolvedBlobUrl]);
+
+  // Resolve Local Video Blob / URL
+  useEffect(() => {
+    let isMounted = true;
+
+    if (item.videoType === 'local' || Boolean(item.videoFileUrl)) {
+      setLoading(true);
+      if (item.videoFileUrl && !item.videoFileUrl.startsWith('blob:')) {
+        setResolvedBlobUrl(getPublicMediaUrl(item.videoFileUrl));
+        setLoading(false);
+      } else {
+        getVideoBlob(item.id).then((blobData) => {
+          if (!isMounted) return;
+          if (blobData) {
+            if (typeof blobData === 'string') {
+              setResolvedBlobUrl(getPublicMediaUrl(blobData));
+            } else {
+              const url = URL.createObjectURL(blobData);
+              setResolvedBlobUrl(url);
+            }
+          } else if (item.videoFileUrl) {
+            setResolvedBlobUrl(getPublicMediaUrl(item.videoFileUrl));
+          } else {
+            setError('ভিডিও ফাইলটি পাওয়া যায়নি।');
+          }
+          setLoading(false);
+        }).catch(() => {
+          if (isMounted) setLoading(false);
+        });
+      }
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [item]);
+
+  const handlePlayStart = () => {
+    broadcastMediaPlaybackStarted(`video-${item.id}`, 'video', videoRef.current);
+  };
+
+  // 1. Local Video or MP4 Direct File
+  if (item.videoType === 'local' || resolvedBlobUrl) {
+    if (loading) {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-stone-950 text-amber-400 text-xs space-y-2">
+          <RefreshCw className="w-6 h-6 animate-spin" />
+          <span>ভিডিও প্রস্তুত হচ্ছে...</span>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <div className="w-full h-full flex flex-col items-center justify-center bg-stone-950 text-stone-400 text-xs p-4 text-center">
+          <AlertCircle className="w-6 h-6 text-red-400 mb-1" />
+          <span>{error}</span>
+        </div>
+      );
+    }
+
+    return (
+      <video
+        ref={videoRef}
+        src={resolvedBlobUrl}
+        controls
+        playsInline
+        preload="metadata"
+        autoPlay={autoPlay}
+        poster={item.thumbnailUrl}
+        onPlay={handlePlayStart}
+        className="w-full h-full object-contain bg-black"
+      />
+    );
+  }
+
+  // 2. Facebook Video Embed
+  if (item.videoType === 'facebook' || (item.youtubeUrl && isFacebookVideoUrl(item.youtubeUrl))) {
+    const parsed = parseUniversalMedia(item.youtubeUrl || '');
+    return (
+      <iframe
+        src={parsed.embedUrl || `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(item.youtubeUrl || '')}&show_text=false`}
+        className="w-full h-full border-0"
+        allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
+        allowFullScreen
+        title={item.title}
+      />
+    );
+  }
+
+  // 3. YouTube Video Embed
+  const youtubeId = item.youtubeId || (item.youtubeUrl ? parseUniversalMedia(item.youtubeUrl).embedUrl : '_65N3D5zTYg');
+  const embedUrl = `https://www.youtube-nocookie.com/embed/${youtubeId}?enablejsapi=1&rel=0&modestbranding=1&playsinline=1${
+    autoPlay ? '&autoplay=1' : ''
+  }`;
+
+  return (
+    <iframe
+      src={embedUrl}
+      className="w-full h-full border-0"
+      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+      allowFullScreen
+      title={item.title}
+    />
   );
 };

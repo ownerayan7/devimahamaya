@@ -33,11 +33,11 @@ import { AboutPage } from './pages/AboutPage';
 import { GalleryPage } from './pages/GalleryPage';
 import { AdminDatabasePage } from './pages/AdminDatabasePage';
 import { NotificationSettingsModal } from './components/NotificationSettingsModal';
-import { ArrowUp, MapPin, MessageSquare, ShieldCheck, Mail, WifiOff, AlertTriangle } from 'lucide-react';
+import { ArrowUp, MapPin, MessageSquare, ShieldCheck, Mail, WifiOff, AlertTriangle, BellRing, X } from 'lucide-react';
 import { CLUB_INFO } from './data/clubData';
 import { db } from './lib/firebase';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
-import { dispatchNativePushNotification, getStoredNotificationSettings, checkSundayPrayerLeadReminder } from './utils/notificationHelper';
+import { dispatchNativePushNotification, getStoredNotificationSettings, checkSundayPrayerLeadReminder, playNotificationChime } from './utils/notificationHelper';
 
 export function App() {
   const [welcomeComplete, setWelcomeComplete] = useState<boolean>(false);
@@ -76,6 +76,15 @@ export function App() {
     };
   }, []);
 
+  // Auto-request lock screen notification permission on page load
+  useEffect(() => {
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      if (Notification.permission === 'default') {
+        Notification.requestPermission().catch(console.warn);
+      }
+    }
+  }, []);
+
   // Background Lock Screen Notification listener for new alerts via Firestore
   useEffect(() => {
     // Check prayer advance reminder immediately and every 30 seconds
@@ -96,14 +105,19 @@ export function App() {
           if (change.type === 'added') {
             const data = change.doc.data();
             const settings = getStoredNotificationSettings();
-            if (settings.enabled) {
-              dispatchNativePushNotification(
-                data.title || 'বিজ্ঞপ্তি',
-                data.message || '11 স্টার ক্লাব থেকে নতুন বার্তা এসেছে।',
-                settings.soundEnabled,
-                data.linkPage || 'prayer'
-              );
-            }
+
+            // Play sweet audio chime locally for this device
+            try {
+              playNotificationChime();
+            } catch (soundErr) {}
+
+            // Dispatch lockscreen / browser push unconditionally once permission is granted
+            dispatchNativePushNotification(
+              data.title || 'বিজ্ঞপ্তি',
+              data.message || '11 স্টার ক্লাব থেকে নতুন বার্তা এসেছে।',
+              settings.soundEnabled,
+              data.linkPage || 'prayer'
+            );
           }
         });
       }, (err) => {

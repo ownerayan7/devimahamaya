@@ -511,7 +511,7 @@ export const HomePage: React.FC<HomePageProps> = ({ onNavigate, onOpenInstallMod
                     className="px-6 py-3 rounded-xl bg-gradient-to-r from-red-600 via-amber-500 to-yellow-500 text-black font-bold text-sm transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:scale-105 active:scale-95 flex items-center justify-center gap-2"
                   >
                     <Play className="w-4 h-4 fill-black" />
-                    <span>Watch Videos (৪টি লাইভ ভিডিও দেখুন)</span>
+                    <span>Watch Videos (ভিডিও দেখুন)</span>
                   </button>
 
                   <a

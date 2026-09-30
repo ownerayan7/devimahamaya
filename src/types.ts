@@ -136,6 +136,7 @@ export interface VideoItem {
   duration?: string;
   tag?: string;
   isCustom?: boolean;
+  uploaderDeviceId?: string;
   createdAt?: number;
   synced?: boolean;
 }
@@ -157,6 +158,7 @@ export interface MemberVideoItem {
   dateAdded: string;
   likes?: number;
   isCustom?: boolean;
+  uploaderDeviceId?: string;
   createdAt?: number;
   synced?: boolean;
 }
@@ -178,6 +180,7 @@ export interface GalleryPhotoItem {
   url: string;
   tag: string;
   isCustom?: boolean;
+  uploaderDeviceId?: string;
   createdAt?: number;
   synced?: boolean;
 }
@@ -191,6 +194,7 @@ export interface TreePlantationPhotoItem {
   tag: string;
   year: string;
   isCustom?: boolean;
+  uploaderDeviceId?: string;
   synced?: boolean;
 }
 
@@ -207,6 +211,7 @@ export interface MemberPhotoItem {
   dateAdded?: string;
   likes?: number;
   isCustom?: boolean;
+  uploaderDeviceId?: string;
   synced?: boolean;
 }
 

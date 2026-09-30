@@ -16,6 +16,8 @@ import { MemberPhotoItem } from '../types';
 import { INITIAL_MEMBER_PHOTOS } from '../data/memberPhotosData';
 import { MemberPhotoUploadModal } from './MemberPhotoUploadModal';
 import { ImageLightbox } from './ImageLightbox';
+import { AdminPhotoAuthModal } from './AdminPhotoAuthModal';
+import { isDeviceUploader } from '../utils/deviceHelper';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, deleteDoc, doc, updateDoc } from 'firebase/firestore';
 import { sendAppNotification } from '../utils/notificationHelper';
@@ -37,6 +39,8 @@ export const MemberCommunityGallery: React.FC = () => {
   });
   const [activeCategory, setActiveCategory] = useState<string>('all');
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isDeleteAuthOpen, setIsDeleteAuthOpen] = useState(false);
+  const [photoToDelete, setPhotoToDelete] = useState<MemberPhotoItem | null>(null);
   const [selectedPhotoIndex, setSelectedPhotoIndex] = useState<number | null>(null);
   const [likedMap, setLikedMap] = useState<Record<string, boolean>>(() => {
     try {
@@ -206,14 +210,20 @@ export const MemberCommunityGallery: React.FC = () => {
     } catch {}
   };
 
-  const handleDeletePhoto = async (e: React.MouseEvent, id: string) => {
+  const handleDeletePhoto = async (e: React.MouseEvent, photo: MemberPhotoItem) => {
     e.stopPropagation();
-    if (window.confirm('আপনি কি এই ছবিটি সদস্য গ্যালারি থেকে মুছে ফেলতে চান?')) {
-      try {
-        await deleteDoc(doc(db, 'memberPhotos', id));
-      } catch (e) {
-        console.error('Failed to delete photo:', e);
-      }
+    setPhotoToDelete(photo);
+    setIsDeleteAuthOpen(true);
+  };
+
+  const executeDeletePhoto = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'memberPhotos', id));
+      setMemberPhotos((prev) => prev.filter((p) => p.id !== id));
+      setIsDeleteAuthOpen(false);
+      setPhotoToDelete(null);
+    } catch (e) {
+      console.error('Failed to delete photo:', e);
     }
   };
 
@@ -408,7 +418,7 @@ export const MemberCommunityGallery: React.FC = () => {
                       <button
                         type="button"
                         title="মুছে ফেলুন"
-                        onClick={(e) => handleDeletePhoto(e, photo.id)}
+                        onClick={(e) => handleDeletePhoto(e, photo)}
                         className="absolute bottom-3 right-3 z-20 p-1.5 rounded-full bg-black/80 hover:bg-red-600 text-white/80 hover:text-white transition-colors shadow-md border border-white/20"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
@@ -504,6 +514,18 @@ export const MemberCommunityGallery: React.FC = () => {
           hasPrev={selectedPhotoIndex !== null && selectedPhotoIndex > 0}
         />
       )}
+
+      {/* Admin PIN Auth Modal for Deletion */}
+      <AdminPhotoAuthModal
+        isOpen={isDeleteAuthOpen}
+        onClose={() => {
+          setIsDeleteAuthOpen(false);
+          setPhotoToDelete(null);
+        }}
+        onAuthenticated={() => {
+          if (photoToDelete) executeDeletePhoto(photoToDelete.id);
+        }}
+      />
     </section>
   );
 };

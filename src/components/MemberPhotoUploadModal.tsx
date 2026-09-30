@@ -20,6 +20,7 @@ import { getAppStorage } from '../lib/firebase';
 import { optimizeImage } from '../utils/imageOptimizer';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 import { uploadMediaFile } from '../utils/uploadHelper';
+import { getDeviceId } from '../utils/deviceHelper';
 
 interface MemberPhotoUploadModalProps {
   isOpen: boolean;
@@ -138,9 +139,9 @@ export const MemberPhotoUploadModal: React.FC<MemberPhotoUploadModalProps> = ({
     const newPhoto: MemberPhotoItem = {
       id: 'mem-' + Date.now(),
       title: title.trim(),
-      caption: caption.trim() || undefined,
-      authorName: authorName.trim() || undefined,
-      authorRole: authorRole.trim() || undefined,
+      caption: caption.trim() || '',
+      authorName: authorName.trim() || '',
+      authorRole: authorRole.trim() || '',
       url: finalImageUrl,
       category,
       tag: tag.trim() || 'সদস্যদের ছবি',
@@ -152,6 +153,7 @@ export const MemberPhotoUploadModal: React.FC<MemberPhotoUploadModalProps> = ({
       }),
       likes: 1,
       isCustom: true,
+      uploaderDeviceId: getDeviceId(),
     };
 
     onAddPhoto(newPhoto);

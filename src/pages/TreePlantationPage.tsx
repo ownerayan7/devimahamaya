@@ -24,6 +24,7 @@ import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadTo
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 import { socket } from '../lib/socket';
 import { sendAppNotification } from '../utils/notificationHelper';
+import { getDeviceId, isDeviceUploader } from '../utils/deviceHelper';
 
 const LOCAL_STORAGE_KEY = '11star_tree_plantation_custom_photos';
 
@@ -162,6 +163,7 @@ export const TreePlantationPage: React.FC = () => {
       ...item,
       isCustom: true,
       year: item.year || '২০২৬',
+      uploaderDeviceId: getDeviceId(),
       createdAt: Date.now(),
       synced: false
     }));
@@ -217,16 +219,15 @@ export const TreePlantationPage: React.FC = () => {
     }
   };
 
-  const handlePromptDeleteCustomPhoto = (e: React.MouseEvent, id: string) => {
+  const handlePromptDeleteCustomPhoto = (e: React.MouseEvent, photo: TreePlantationPhotoItem) => {
     e.stopPropagation();
-    setPhotoToDeleteId(id);
+    setPhotoToDeleteId(photo.id);
     setIsDeleteAuthOpen(true);
   };
 
-  const handleConfirmDeleteCustomPhoto = async () => {
-    if (!photoToDeleteId) return;
-    const idStr = String(photoToDeleteId);
-    const updated = customPhotos.filter((p) => p.id !== photoToDeleteId);
+  const executeDeleteTreePhoto = async (id: string) => {
+    const idStr = String(id);
+    const updated = customPhotos.filter((p) => p.id !== id);
     await saveCustomPhotos(updated);
 
     try {
@@ -434,12 +435,12 @@ export const TreePlantationPage: React.FC = () => {
                     )}
                   </div>
 
-                  {/* Delete button if custom (Admin only with password) */}
+                  {/* Delete button if custom */}
                   {photo.isCustom && (
                     <button
                       type="button"
-                      title="এই অফিসিয়াল ছবিটি মুছে ফেলুন (অ্যাডমিন পাসওয়ার্ড আবশ্যক)"
-                      onClick={(e) => handlePromptDeleteCustomPhoto(e, photo.id)}
+                      title="ছবিটি মুছে ফেলুন"
+                      onClick={(e) => handlePromptDeleteCustomPhoto(e, photo)}
                       className="absolute top-3 right-14 z-20 p-1.5 rounded-full bg-black/80 hover:bg-red-600 text-white/80 hover:text-white transition-colors shadow-md border border-white/20"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
@@ -584,7 +585,9 @@ export const TreePlantationPage: React.FC = () => {
           setIsDeleteAuthOpen(false);
           setPhotoToDeleteId(null);
         }}
-        onAuthenticated={handleConfirmDeleteCustomPhoto}
+        onAuthenticated={() => {
+          if (photoToDeleteId) executeDeleteTreePhoto(photoToDeleteId);
+        }}
         actionTitle="অফিসিয়াল ফটো মুছে ফেলুন"
         description="অ্যাডমিনদের আপলোড করা এই অফিসিয়াল ছবিটি সাধারণ সদস্যরা মুছতে পারবেন না। নিশ্চিতভাবে মুছে ফেলতে অ্যাডমিন পাসওয়ার্ড দিন।"
         submitButtonText="পাসওয়ার্ড যাচাই করে নিশ্চিত মুছুন"

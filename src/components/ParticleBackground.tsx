@@ -30,7 +30,7 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({ reducedM
 
     window.addEventListener('resize', handleResize);
 
-    const particleCount = Math.min(Math.floor((width * height) / 16000), 65);
+    const particleCount = Math.min(Math.floor((width * height) / 16000), 60);
     const particles: Array<{
       x: number;
       y: number;
@@ -39,31 +39,22 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({ reducedM
       vy: number;
       alpha: number;
       alphaChange: number;
-      color: string;
-      shape: 'circle' | 'square' | 'diamond';
+      type: 'flower' | 'gold_ball';
       rotation: number;
       vRot: number;
     }> = [];
 
-    const colors = [
-      'rgba(245, 158, 11, ', // Amber gold
-      'rgba(251, 191, 36, ', // Bright gold
-      'rgba(239, 68, 68, ',  // Festive red
-      'rgba(255, 215, 0, ',  // Golden yellow
-    ];
-
     for (let i = 0; i < particleCount; i++) {
-      const isSquare = i % 3 === 0;
+      const isFlower = i % 3 === 0; // 33% Shiuli flowers, 66% golden balls
       particles.push({
         x: Math.random() * width,
         y: Math.random() * height,
-        size: isSquare ? Math.random() * 8 + 3 : Math.random() * 3 + 1,
+        size: isFlower ? Math.random() * 3.5 + 3.5 : Math.random() * 4 + 1.5,
         vx: (Math.random() - 0.5) * 0.4,
-        vy: -Math.random() * 0.6 - 0.1, // Floating gently upwards
-        alpha: Math.random() * 0.7 + 0.2,
-        alphaChange: (Math.random() * 0.01 + 0.003) * (Math.random() > 0.5 ? 1 : -1),
-        color: colors[Math.floor(Math.random() * colors.length)],
-        shape: isSquare ? (i % 6 === 0 ? 'diamond' : 'square') : 'circle',
+        vy: -Math.random() * 0.5 - 0.15, // Floating gently upwards
+        alpha: Math.random() * 0.6 + 0.25,
+        alphaChange: (Math.random() * 0.006 + 0.002) * (Math.random() > 0.5 ? 1 : -1),
+        type: isFlower ? 'flower' : 'gold_ball',
         rotation: Math.random() * Math.PI * 2,
         vRot: (Math.random() - 0.5) * 0.02,
       });
@@ -78,41 +69,57 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({ reducedM
         p.rotation += p.vRot;
         p.alpha += p.alphaChange;
 
-        if (p.alpha <= 0.1 || p.alpha >= 0.8) {
+        if (p.alpha <= 0.15 || p.alpha >= 0.85) {
           p.alphaChange = -p.alphaChange;
         }
 
-        if (p.y < -15) {
-          p.y = height + 15;
+        if (p.y < -25) {
+          p.y = height + 25;
           p.x = Math.random() * width;
         }
-        if (p.x < -15) p.x = width + 15;
-        if (p.x > width + 15) p.x = -15;
+        if (p.x < -25) p.x = width + 25;
+        if (p.x > width + 25) p.x = -25;
 
         ctx.save();
         ctx.translate(p.x, p.y);
         ctx.rotate(p.rotation);
 
-        const currentAlpha = Math.max(0.05, Math.min(0.85, p.alpha));
-        ctx.fillStyle = `${p.color}${currentAlpha})`;
+        const currentAlpha = Math.max(0.1, Math.min(0.9, p.alpha));
 
-        if (p.shape === 'circle') {
+        if (p.type === 'flower') {
+          // Draw high-fidelity Shiuli / Kash Phool Flower (White Petals + Orange Center)
+          ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
+          ctx.shadowBlur = 4;
+
+          // Draw 8 white petals symmetrically
+          ctx.fillStyle = `rgba(255, 255, 255, ${currentAlpha * 0.95})`;
+          for (let j = 0; j < 8; j++) {
+            ctx.save();
+            ctx.rotate((j * Math.PI) / 4);
+            ctx.beginPath();
+            ctx.ellipse(0, -p.size * 1.3, p.size * 0.55, p.size * 1.05, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+          }
+
+          // Draw the iconic bright orange-red center circle of Shiuli
+          ctx.fillStyle = `rgba(234, 88, 12, ${currentAlpha})`;
           ctx.beginPath();
-          ctx.arc(0, 0, p.size, 0, Math.PI * 2);
+          ctx.arc(0, 0, p.size * 0.6, 0, Math.PI * 2);
           ctx.fill();
-        } else if (p.shape === 'square') {
-          ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
-          ctx.strokeStyle = `${p.color}${currentAlpha * 0.8})`;
-          ctx.lineWidth = 0.8;
-          ctx.strokeRect(-p.size / 2, -p.size / 2, p.size, p.size);
         } else {
-          // Diamond
+          // Draw Glowing Golden Dust Ball with a beautiful radial gradient glow
+          ctx.shadowColor = 'rgba(245, 158, 11, 0.5)';
+          ctx.shadowBlur = 8;
+
+          const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, p.size * 1.8);
+          grad.addColorStop(0, `rgba(255, 254, 240, ${currentAlpha})`);    // white gold core
+          grad.addColorStop(0.3, `rgba(251, 191, 36, ${currentAlpha * 0.8})`); // amber bright gold
+          grad.addColorStop(1, 'rgba(245, 158, 11, 0)');                    // soft fade out
+
+          ctx.fillStyle = grad;
           ctx.beginPath();
-          ctx.moveTo(0, -p.size);
-          ctx.lineTo(p.size, 0);
-          ctx.lineTo(0, p.size);
-          ctx.lineTo(-p.size, 0);
-          ctx.closePath();
+          ctx.arc(0, 0, p.size * 1.8, 0, Math.PI * 2);
           ctx.fill();
         }
 

@@ -25,6 +25,7 @@ import { generateVideoThumbnail, saveVideoBlob } from '../utils/videoStorageHelp
 import { uploadMediaFile } from '../utils/uploadHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 import { convertFileToDataUrl } from '../utils/fileConverter';
+import { getDeviceId } from '../utils/deviceHelper';
 
 interface MemberVideoUploadModalProps {
   isOpen: boolean;
@@ -160,6 +161,7 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
         dateAdded: 'আজ',
         likes: 1,
         isCustom: true,
+        uploaderDeviceId: getDeviceId(),
         createdAt: Date.now()
       };
 
@@ -195,7 +197,7 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
       if (videoFile) {
         setIsProcessingFile(true);
         const uploadedUrl = await uploadMediaFile(videoFile, 'memberVideos');
-        finalVideoUrl = uploadedUrl || '';
+        finalVideoUrl = (uploadedUrl && !uploadedUrl.startsWith('blob:')) ? uploadedUrl : '';
 
         try {
           await saveVideoBlob(videoId, videoFile);
@@ -220,6 +222,7 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
         dateAdded: 'আজ',
         likes: 1,
         isCustom: true,
+        uploaderDeviceId: getDeviceId(),
         createdAt: Date.now()
       };
 

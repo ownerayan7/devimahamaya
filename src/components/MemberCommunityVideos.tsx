@@ -28,7 +28,7 @@ import { copyTextToClipboard } from '../utils/clipboardHelper';
 import { broadcastMediaPlaybackStarted, registerHtmlMediaElement } from '../utils/mediaCoordinator';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
-import { uploadToFallbackServer } from '../utils/persistentStorage';
+import { uploadToFallbackServer, loadPersistentItems, savePersistentItems, mergeItemsWithLocal, fetchFromFallbackServer } from '../utils/persistentStorage';
 import { socket } from '../lib/socket';
 import { sendAppNotification } from '../utils/notificationHelper';
 
@@ -104,24 +104,20 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
     }
   }, [selectedVideo, selectedFileUrl]);
 
-  // Load member videos and likes from localStorage on mount
+  // Load member videos and likes from localStorage on mount & sync in real time
   useEffect(() => {
-    // 1. Initial load from localStorage
-    try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+    // 1. Initial load from persistent storage
+    loadPersistentItems<MemberVideoItem>(STORAGE_KEY).then((saved) => {
       let list = INITIAL_MEMBER_VIDEOS;
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          list = [...parsed].sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
-        }
+      if (saved && saved.length > 0) {
+        list = [...saved, ...INITIAL_MEMBER_VIDEOS.filter((i: MemberVideoItem) => !saved.some(p => p.id === i.id))];
+        list.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
       }
       setMemberVideos(list);
-      if (list.length > 0) {
+      if (list.length > 0 && !hasUserSelectedRef.current) {
         handlePlayMemberVideo(list[0], false);
       }
 
-      // Load like counts
       const counts: Record<string, number> = {};
       list.forEach((v) => {
         counts[v.id] = v.likes || 1;
@@ -132,13 +128,7 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
         setLikedMap(JSON.parse(savedLikes));
       }
       setLikeCounts(counts);
-    } catch (e) {
-      console.error('Failed to load member videos:', e);
-      setMemberVideos(INITIAL_MEMBER_VIDEOS);
-      if (INITIAL_MEMBER_VIDEOS.length > 0) {
-        handlePlayMemberVideo(INITIAL_MEMBER_VIDEOS[0], false);
-      }
-    }
+    });
 
     // 2. Real-time Firestore sync
     try {
@@ -152,76 +142,83 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
               id: docSnap.id,
             });
           });
-          firestoreList.sort((a: any, b: any) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
-          if (firestoreList.length > 0) {
-            setMemberVideos(firestoreList);
-            if (!hasUserSelectedRef.current && firestoreList.length > 0) {
-              handlePlayMemberVideo(firestoreList[0], false);
+
+          loadPersistentItems<MemberVideoItem>(STORAGE_KEY).then((local) => {
+            const cloudIds = new Set(firestoreList.map(v => String(v.id)));
+
+            // --- SAFE DELETION DETECTION ---
+            // If an item is missing from cloud and was synced or created > 10s ago, it was DELETED!
+            const filteredLocal = local.filter((item) => {
+              if (item.isCustom && !cloudIds.has(String(item.id))) {
+                const isOld = (Date.now() - (getCreatedTimestamp(item) || 0)) > 10000;
+                if ((item as any).synced === true || isOld) {
+                  console.log(`[Sync] Detected deletion of member video: ${item.id}. Removing from local cache.`);
+                  return false;
+                }
+              }
+              return true;
+            });
+
+            const merged = mergeItemsWithLocal(firestoreList, filteredLocal);
+            merged.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
+
+            const finalLocalWithSyncFlags = merged.map((item) => {
+              if (cloudIds.has(String(item.id))) {
+                return { ...item, synced: true };
+              }
+              return item;
+            });
+
+            setMemberVideos(finalLocalWithSyncFlags);
+            savePersistentItems(STORAGE_KEY, finalLocalWithSyncFlags);
+
+            if (!hasUserSelectedRef.current && finalLocalWithSyncFlags.length > 0) {
+              handlePlayMemberVideo(finalLocalWithSyncFlags[0], false);
             }
 
             const counts: Record<string, number> = {};
-            firestoreList.forEach((v) => {
+            finalLocalWithSyncFlags.forEach((v) => {
               counts[v.id] = v.likes || 1;
             });
             setLikeCounts((prev) => ({ ...prev, ...counts }));
-            try {
-              localStorage.setItem(STORAGE_KEY, JSON.stringify(firestoreList));
-            } catch {}
 
             // --- SMART AUTO BACKGROUND RE-SYNC ---
-            try {
-              const savedLocalRaw = localStorage.getItem('11star_member_videos_storage_local_uploads_v1') || '[]';
-              const localUploads: MemberVideoItem[] = JSON.parse(savedLocalRaw);
-              if (localUploads.length > 0) {
-                const cloudIds = new Set(firestoreList.map(v => String(v.id)));
-
-                // --- SAFE DELETION DETECTION ---
-                // If an item in localUploads has synced: true but is missing from cloud, it was DELETED.
-                // So we discard it from localUploads so it does not reappear!
-                const filteredLocal = localUploads.filter((item) => {
-                  if ((item as any).synced === true && !cloudIds.has(String(item.id))) {
-                    console.log(`[Sync] Detected deletion of member video: ${item.id}. Removing from local uploads.`);
-                    return false;
-                  }
-                  return true;
-                });
-
-                // Mark any item successfully in cloud as synced: true
-                const updatedLocalWithSyncFlags = filteredLocal.map((item) => {
-                  if (cloudIds.has(String(item.id))) {
-                    return { ...item, synced: true };
-                  }
-                  return item;
-                });
-
-                localStorage.setItem('11star_member_videos_storage_local_uploads_v1', JSON.stringify(updatedLocalWithSyncFlags));
-
-                // --- SMART AUTO BACKGROUND RE-SYNC ---
-                const localOnlyToUpload = updatedLocalWithSyncFlags.filter(v => !v.synced);
-                if (localOnlyToUpload.length > 0) {
-                  console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced member videos. Restoring...`);
-                  localOnlyToUpload.forEach(async (item) => {
-                    try {
-                      const updatedItem = { ...item, synced: true };
-                      await setDoc(doc(db, 'memberVideos', String(item.id)), updatedItem);
-                      await uploadToFallbackServer('member_video', item.title || 'সদস্য ভিডিও', item.description || '', updatedItem);
-                      console.log(`[Auto-Sync] Successfully restored member video:`, item.id);
-                    } catch (err) {
-                      console.warn('[Auto-Sync] Failed to restore member video:', item.id, err);
-                    }
-                  });
+            const localOnlyToUpload = finalLocalWithSyncFlags.filter(v => v.isCustom && !(v as any).synced);
+            if (localOnlyToUpload.length > 0) {
+              console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced member videos. Restoring...`);
+              localOnlyToUpload.forEach(async (item) => {
+                try {
+                  const updatedItem = { ...item, synced: true };
+                  await setDoc(doc(db, 'memberVideos', String(item.id)), updatedItem);
+                  await uploadToFallbackServer('member_video', item.title || 'সদস্য ভিডিও', item.description || '', updatedItem);
+                  console.log(`[Auto-Sync] Successfully restored member video:`, item.id);
+                } catch (err) {
+                  console.warn('[Auto-Sync] Failed to restore member video:', item.id, err);
                 }
-              }
-            } catch (syncErr) {
-              console.warn('[Auto-Sync] Error syncing memberVideos:', syncErr);
+              });
             }
-            // -------------------------------------
-          }
+          });
         },
         (err) => {
           console.warn('Firestore memberVideos snapshot notice:', err);
         }
       );
+
+      // PostgreSQL Hybrid Sync Fallback
+      fetchFromFallbackServer<MemberVideoItem>('member_video').then((sqlVideos) => {
+        if (sqlVideos && sqlVideos.length > 0) {
+          loadPersistentItems<MemberVideoItem>(STORAGE_KEY).then((local) => {
+            const merged = mergeItemsWithLocal(sqlVideos, local);
+            merged.sort((a, b) => getCreatedTimestamp(b) - getCreatedTimestamp(a));
+            setMemberVideos(merged);
+            savePersistentItems(STORAGE_KEY, merged);
+            if (!hasUserSelectedRef.current && merged.length > 0) {
+              handlePlayMemberVideo(merged[0], false);
+            }
+          });
+        }
+      }).catch(err => console.warn('Member videos SQL fallback load notice:', err));
+
       return () => unsub();
     } catch (e) {
       console.warn('Firestore listener fallback:', e);
@@ -295,8 +292,8 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
   const handleDeleteVideo = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
     if (window.confirm('আপনি কি নিশ্চিত যে এই সদস্য ভিডিওটি মুছে ফেলতে চান?')) {
-      const updated = memberVideos.filter((v) => v.id !== id);
-      saveVideos(updated);
+      const updated = memberVideos.filter((v) => String(v.id) !== String(id));
+      setMemberVideos(updated);
 
       if (selectedVideo?.id === id) {
         if (updated.length > 0) {
@@ -306,6 +303,9 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
           setSelectedFileUrl('');
         }
       }
+
+      const customOnly = updated.filter(v => v.isCustom);
+      await savePersistentItems(STORAGE_KEY, customOnly);
 
       try {
         await deleteVideoBlob(id);
