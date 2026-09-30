@@ -540,18 +540,18 @@ export const SundayPrayerPage: React.FC = () => {
                 />
               );
             })()
+          ) : (liveConfig.fallbackUrl && !liveConfig.fallbackUrl.startsWith('blob:') && isDirectVideoUrl(liveConfig.fallbackUrl)) ? (
+            <video
+              controls
+              playsInline
+              src={getPublicMediaUrl(liveConfig.fallbackUrl)}
+              className="w-full h-full object-contain bg-black"
+            />
           ) : resolvedFallbackBlobUrl ? (
             <video
               controls
               playsInline
               src={getPublicMediaUrl(resolvedFallbackBlobUrl)}
-              className="w-full h-full object-contain bg-black"
-            />
-          ) : isDirectVideoUrl(liveConfig.fallbackUrl) ? (
-            <video
-              controls
-              playsInline
-              src={getPublicMediaUrl(liveConfig.fallbackUrl)}
               className="w-full h-full object-contain bg-black"
             />
           ) : liveConfig.fallbackUrl ? (

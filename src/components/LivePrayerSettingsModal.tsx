@@ -96,13 +96,11 @@ export const LivePrayerSettingsModal: React.FC<LivePrayerSettingsModalProps> = (
       blobId = `prayer-live-fallback-permanent`;
       isLocalBlob = true;
       try {
+        await saveVideoBlob(blobId, selectedFile);
         const uploadedUrl = await uploadMediaFile(selectedFile, 'prayerFallback');
         if (uploadedUrl) {
           finalFallbackUrl = uploadedUrl;
-          blobId = '';
-          isLocalBlob = false;
         } else {
-          await saveVideoBlob(blobId, selectedFile);
           finalFallbackUrl = '';
         }
       } catch (err) {

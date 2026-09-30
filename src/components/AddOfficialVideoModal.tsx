@@ -21,7 +21,7 @@ import {
 import { VideoItem } from '../types';
 import { extractYouTubeId, getYouTubeThumbnail, formatYouTubeWatchUrl } from '../utils/youtubeHelper';
 import { generateVideoThumbnail, saveVideoBlob } from '../utils/videoStorageHelper';
-import { uploadMediaFile, formatPublicUrl } from '../utils/uploadHelper';
+import { uploadMediaFile } from '../utils/uploadHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 import { convertFileToDataUrl } from '../utils/fileConverter';
 
@@ -192,23 +192,13 @@ export const AddOfficialVideoModal: React.FC<AddOfficialVideoModalProps> = ({
       if (videoFile) {
         setIsProcessingFile(true);
         const uploadedUrl = await uploadMediaFile(videoFile, 'officialVideos');
-        finalVideoUrl = uploadedUrl ? formatPublicUrl(uploadedUrl) : '';
-
-        if (!finalVideoUrl || finalVideoUrl.startsWith('blob:')) {
-          try {
-            finalVideoUrl = await convertFileToDataUrl(videoFile);
-          } catch (dataErr) {
-            finalVideoUrl = videoFilePreview;
-          }
-        }
+        finalVideoUrl = (uploadedUrl && !uploadedUrl.startsWith('blob:')) ? uploadedUrl : '';
 
         try {
           await saveVideoBlob(videoId, videoFile);
         } catch (storageErr) {
           console.warn('Could not store in IndexedDB:', storageErr);
         }
-      } else {
-        finalVideoUrl = videoFilePreview;
       }
 
       const newVideo: VideoItem = {

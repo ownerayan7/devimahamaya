@@ -405,18 +405,25 @@ export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) =>
     setActiveVideoTag(video.tag || '');
 
     if (isLocal) {
-      // Check if blob is cached in IndexedDB
-      try {
-        const storedBlob = await getVideoBlob(video.id);
-        if (storedBlob) {
-          const freshBlobUrl = URL.createObjectURL(storedBlob as Blob);
-          setActiveVideoFileUrl(freshBlobUrl);
-        } else if (video.videoFileUrl) {
-          setActiveVideoFileUrl(getPublicMediaUrl(video.videoFileUrl));
-        }
-      } catch {
-        if (video.videoFileUrl) {
-          setActiveVideoFileUrl(getPublicMediaUrl(video.videoFileUrl));
+      if (video.videoFileUrl && !video.videoFileUrl.startsWith('blob:')) {
+        setActiveVideoFileUrl(getPublicMediaUrl(video.videoFileUrl));
+      } else {
+        try {
+          const storedBlob = await getVideoBlob(video.id);
+          if (storedBlob) {
+            if (typeof storedBlob === 'string' && !storedBlob.startsWith('blob:')) {
+              setActiveVideoFileUrl(getPublicMediaUrl(storedBlob));
+            } else if (storedBlob instanceof Blob) {
+              const freshBlobUrl = URL.createObjectURL(storedBlob);
+              setActiveVideoFileUrl(freshBlobUrl);
+            }
+          } else if (video.videoFileUrl && !video.videoFileUrl.startsWith('blob:')) {
+            setActiveVideoFileUrl(getPublicMediaUrl(video.videoFileUrl));
+          }
+        } catch {
+          if (video.videoFileUrl && !video.videoFileUrl.startsWith('blob:')) {
+            setActiveVideoFileUrl(getPublicMediaUrl(video.videoFileUrl));
+          }
         }
       }
     } else {

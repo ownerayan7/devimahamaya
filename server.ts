@@ -453,8 +453,8 @@ app.delete('/api/sync-logs/:id', async (req, res) => {
   }
 });
 
-// Direct Binary File Upload Endpoint (Fast, handles huge files without base64 overhead)
-app.post('/api/upload-binary', express.raw({ type: '*/*', limit: '500mb' }), async (req, res) => {
+// Direct Binary Stream File Upload Endpoint (Streaming req.pipe, handles large files on mobile without RAM overhead)
+app.post('/api/upload-binary', async (req, res) => {
   try {
     const filename = (req.query.filename as string) || 'file.mp4';
     const ext = filename.split('.').pop() || 'bin';
@@ -462,35 +462,57 @@ app.post('/api/upload-binary', express.raw({ type: '*/*', limit: '500mb' }), asy
     const safeFilename = `${Date.now()}_${cleanName}.${ext}`;
     const filePath = path.join(uploadsDir, safeFilename);
 
-    await fs.promises.writeFile(filePath, req.body);
+    const writeStream = fs.createWriteStream(filePath);
+    req.pipe(writeStream);
 
-    const forwardedHost = req.get('x-forwarded-host') || req.get('host') || '';
-    const isLocal = forwardedHost.includes('localhost') || forwardedHost.includes('127.0.0.1') || !forwardedHost;
-    const protocol = req.headers['x-forwarded-proto'] === 'https' || req.protocol === 'https' ? 'https' : 'http';
-    
-    const publicUrl = isLocal ? `/uploads/${safeFilename}` : `${protocol}://${forwardedHost}/uploads/${safeFilename}`;
+    writeStream.on('finish', async () => {
+      try {
+        const stats = await fs.promises.stat(filePath);
+        const forwardedHost = req.get('x-forwarded-host') || req.get('host') || '';
+        const isLocal = forwardedHost.includes('localhost') || forwardedHost.includes('127.0.0.1') || !forwardedHost;
+        const protocol = req.headers['x-forwarded-proto'] === 'https' || req.protocol === 'https' ? 'https' : 'http';
+        const publicUrl = isLocal ? `/uploads/${safeFilename}` : `${protocol}://${forwardedHost}/uploads/${safeFilename}`;
 
-    // Save persistent metadata record in Cloud SQL database
-    try {
-      await saveCloudMediaFile(safeFilename, req.headers['content-type'] || 'application/octet-stream', publicUrl, 'binary_stream', req.body.length, 'Web Client');
-    } catch (dbErr) {
-      console.warn('Could not record binary upload in Cloud SQL:', dbErr);
-    }
+        try {
+          await saveCloudMediaFile(
+            safeFilename,
+            (req.headers['content-type'] as string) || 'video/mp4',
+            publicUrl,
+            'binary_stream',
+            stats.size,
+            'Web Client'
+          );
+        } catch (dbErr) {
+          console.warn('Could not record binary upload in Cloud SQL:', dbErr);
+        }
 
-    // Emit real-time Socket.IO upload notification
-    try {
-      io.emit('item_uploaded', {
-        category: 'cloud_media',
-        filename: safeFilename,
-        publicUrl,
-        sizeBytes: req.body.length
-      });
-    } catch (wsErr) {
-      console.warn('Socket emit notice:', wsErr);
-    }
+        try {
+          io.emit('item_uploaded', {
+            category: 'cloud_media',
+            filename: safeFilename,
+            publicUrl,
+            sizeBytes: stats.size
+          });
+        } catch (wsErr) {}
 
-    console.log(`[Binary Upload] Successfully saved file: ${safeFilename} (${req.body.length} bytes) -> ${publicUrl}`);
-    return res.json({ success: true, url: publicUrl, relativeUrl: `/uploads/${safeFilename}`, filename: safeFilename });
+        console.log(`[Binary Stream Upload] Successfully saved stream file: ${safeFilename} (${stats.size} bytes) -> ${publicUrl}`);
+        return res.json({
+          success: true,
+          url: publicUrl,
+          relativeUrl: `/uploads/${safeFilename}`,
+          filename: safeFilename,
+          sizeBytes: stats.size
+        });
+      } catch (statErr: any) {
+        console.error('[Binary Stream Stat Error]', statErr);
+        return res.status(500).json({ error: 'Failed to verify uploaded file' });
+      }
+    });
+
+    writeStream.on('error', (err) => {
+      console.error('[Binary Stream Upload Write Error]', err);
+      return res.status(500).json({ error: 'Failed to write stream to disk' });
+    });
   } catch (err: any) {
     console.error('[Binary Upload Error]', err);
     return res.status(500).json({ error: err.message || 'Failed to save binary upload' });
