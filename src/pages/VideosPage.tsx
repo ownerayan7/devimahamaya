@@ -565,21 +565,28 @@ export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) =>
           {/* Unified Video Player - Plays both local gallery video and YouTube directly on this page */}
           <div className="relative w-full aspect-video rounded-2xl overflow-hidden bg-black border border-amber-500/30 shadow-inner flex items-center justify-center">
             {activeVideoType === 'local' || !activeVideoId || activeVideoId.startsWith('custom-') || activeVideoId.startsWith('local-') || activeVideoId.startsWith('member-') ? (
-              activeVideoFileUrl ? (
-                <video
-                  ref={localVideoRef}
-                  key={activeVideoFileUrl}
-                  src={activeVideoFileUrl}
-                  controls
-                  playsInline
-                  className="w-full h-full object-contain bg-black"
-                />
-              ) : (
-                <div className="flex flex-col items-center justify-center p-6 text-center space-y-2 text-stone-300">
-                  <Tv className="w-10 h-10 text-amber-400 animate-pulse" />
-                  <p className="text-sm font-bold font-serif-bengali">গ্যালারি ভিডিও প্লে হচ্ছে...</p>
-                </div>
-              )
+              (() => {
+                const matchedVideo = allOfficialVideos.find(v => String(v.id) === String(activeVideoId));
+                const resolvedUrl = activeVideoFileUrl || (matchedVideo?.videoFileUrl ? getPublicMediaUrl(matchedVideo.videoFileUrl) : '');
+                if (resolvedUrl) {
+                  return (
+                    <video
+                      ref={localVideoRef}
+                      key={resolvedUrl}
+                      src={resolvedUrl}
+                      controls
+                      playsInline
+                      className="w-full h-full object-contain bg-black"
+                    />
+                  );
+                }
+                return (
+                  <div className="flex flex-col items-center justify-center p-6 text-center space-y-2 text-stone-300">
+                    <Tv className="w-10 h-10 text-amber-400 animate-pulse" />
+                    <p className="text-sm font-bold font-serif-bengali">ভিডিও লোড হচ্ছে...</p>
+                  </div>
+                );
+              })()
             ) : (
               <iframe
                 key={activeVideoId}

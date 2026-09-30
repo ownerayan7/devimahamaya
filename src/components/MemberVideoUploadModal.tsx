@@ -195,7 +195,7 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
       if (videoFile) {
         setIsProcessingFile(true);
         const uploadedUrl = await uploadMediaFile(videoFile, 'memberVideos');
-        finalVideoUrl = (uploadedUrl && !uploadedUrl.startsWith('blob:')) ? uploadedUrl : '';
+        finalVideoUrl = uploadedUrl || '';
 
         try {
           await saveVideoBlob(videoId, videoFile);

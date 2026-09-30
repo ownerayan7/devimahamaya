@@ -468,10 +468,8 @@ app.post('/api/upload-binary', async (req, res) => {
     writeStream.on('finish', async () => {
       try {
         const stats = await fs.promises.stat(filePath);
-        const forwardedHost = req.get('x-forwarded-host') || req.get('host') || '';
-        const isLocal = forwardedHost.includes('localhost') || forwardedHost.includes('127.0.0.1') || !forwardedHost;
-        const protocol = req.headers['x-forwarded-proto'] === 'https' || req.protocol === 'https' ? 'https' : 'http';
-        const publicUrl = isLocal ? `/uploads/${safeFilename}` : `${protocol}://${forwardedHost}/uploads/${safeFilename}`;
+        const relativePath = `/uploads/${safeFilename}`;
+        const publicUrl = relativePath;
 
         try {
           await saveCloudMediaFile(
@@ -535,11 +533,8 @@ app.post('/api/upload-media', async (req, res) => {
 
     await fs.promises.writeFile(filePath, Buffer.from(base64Data, 'base64'));
 
-    const forwardedHost = req.get('x-forwarded-host') || req.get('host') || '';
-    const isLocal = forwardedHost.includes('localhost') || forwardedHost.includes('127.0.0.1') || !forwardedHost;
-    const protocol = req.headers['x-forwarded-proto'] === 'https' || req.protocol === 'https' ? 'https' : 'http';
-
-    const publicUrl = isLocal ? `/uploads/${safeFilename}` : `${protocol}://${forwardedHost}/uploads/${safeFilename}`;
+    const relativePath = `/uploads/${safeFilename}`;
+    const publicUrl = relativePath;
 
     // Save persistent metadata record in Cloud SQL database
     try {

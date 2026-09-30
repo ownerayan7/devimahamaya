@@ -18,20 +18,16 @@ export function getPublicMediaUrl(url: string): string {
   if (!url) return '';
   const trimmed = url.trim();
   if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
-  
-  if (trimmed.startsWith('/uploads/')) {
+
+  const uploadsIdx = trimmed.indexOf('/uploads/');
+  if (uploadsIdx !== -1) {
+    const relativePath = trimmed.substring(uploadsIdx);
     if (typeof window !== 'undefined' && window.location?.origin) {
-      return `${window.location.origin}${trimmed}`;
+      return `${window.location.origin}${relativePath}`;
     }
-    return trimmed;
+    return relativePath;
   }
-  
-  if (trimmed.includes('localhost') || trimmed.includes('127.0.0.1')) {
-    const idx = trimmed.indexOf('/uploads/');
-    if (idx !== -1 && typeof window !== 'undefined' && window.location?.origin) {
-      return `${window.location.origin}${trimmed.substring(idx)}`;
-    }
-  }
+
   return trimmed;
 }
 
