@@ -14,7 +14,9 @@ import {
   createTreePlantationRecord,
   getSyncLogs,
   createSyncLog,
-  deleteSyncLog
+  deleteSyncLog,
+  saveCloudMediaFile,
+  getCloudMediaFiles
 } from './src/db/users.ts';
 import { createServer } from 'http';
 import { Server } from 'socket.io';
@@ -57,14 +59,13 @@ const uploadsDir = path.join(__dirname, 'public', 'uploads');
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
-app.use('/uploads', cors(), express.static(uploadsDir, {
-  acceptRanges: true,
-  setHeaders: (res) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
-    res.setHeader('Cache-Control', 'public, max-age=31536000');
-  }
-}));
+app.use('/uploads', (req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, HEAD, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Range');
+  res.header('Accept-Ranges', 'bytes');
+  next();
+}, express.static(uploadsDir));
 
 // Initialize GoogleGenAI SDK
 const ai = new GoogleGenAI({
@@ -463,12 +464,33 @@ app.post('/api/upload-binary', express.raw({ type: '*/*', limit: '500mb' }), asy
 
     await fs.promises.writeFile(filePath, req.body);
 
-    const host = req.get('host') || 'localhost:3000';
-    const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-    const publicUrl = `${protocol}://${host}/uploads/${safeFilename}`;
+    const forwardedHost = req.get('x-forwarded-host') || req.get('host') || '';
+    const isLocal = forwardedHost.includes('localhost') || forwardedHost.includes('127.0.0.1') || !forwardedHost;
+    const protocol = req.headers['x-forwarded-proto'] === 'https' || req.protocol === 'https' ? 'https' : 'http';
+    
+    const publicUrl = isLocal ? `/uploads/${safeFilename}` : `${protocol}://${forwardedHost}/uploads/${safeFilename}`;
+
+    // Save persistent metadata record in Cloud SQL database
+    try {
+      await saveCloudMediaFile(safeFilename, req.headers['content-type'] || 'application/octet-stream', publicUrl, 'binary_stream', req.body.length, 'Web Client');
+    } catch (dbErr) {
+      console.warn('Could not record binary upload in Cloud SQL:', dbErr);
+    }
+
+    // Emit real-time Socket.IO upload notification
+    try {
+      io.emit('item_uploaded', {
+        category: 'cloud_media',
+        filename: safeFilename,
+        publicUrl,
+        sizeBytes: req.body.length
+      });
+    } catch (wsErr) {
+      console.warn('Socket emit notice:', wsErr);
+    }
 
     console.log(`[Binary Upload] Successfully saved file: ${safeFilename} (${req.body.length} bytes) -> ${publicUrl}`);
-    return res.json({ success: true, url: publicUrl, filename: safeFilename });
+    return res.json({ success: true, url: publicUrl, relativeUrl: `/uploads/${safeFilename}`, filename: safeFilename });
   } catch (err: any) {
     console.error('[Binary Upload Error]', err);
     return res.status(500).json({ error: err.message || 'Failed to save binary upload' });
@@ -491,12 +513,32 @@ app.post('/api/upload-media', async (req, res) => {
 
     await fs.promises.writeFile(filePath, Buffer.from(base64Data, 'base64'));
 
-    const host = req.get('host') || 'localhost:3000';
-    const protocol = req.protocol === 'https' || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
-    const publicUrl = `${protocol}://${host}/uploads/${safeFilename}`;
+    const forwardedHost = req.get('x-forwarded-host') || req.get('host') || '';
+    const isLocal = forwardedHost.includes('localhost') || forwardedHost.includes('127.0.0.1') || !forwardedHost;
+    const protocol = req.headers['x-forwarded-proto'] === 'https' || req.protocol === 'https' ? 'https' : 'http';
+
+    const publicUrl = isLocal ? `/uploads/${safeFilename}` : `${protocol}://${forwardedHost}/uploads/${safeFilename}`;
+
+    // Save persistent metadata record in Cloud SQL database
+    try {
+      await saveCloudMediaFile(safeFilename, req.body.mimeType || 'application/octet-stream', publicUrl, 'base64_media', Buffer.from(base64Data, 'base64').length, 'Web Client');
+    } catch (dbErr) {
+      console.warn('Could not record media upload in Cloud SQL:', dbErr);
+    }
+
+    // Emit real-time Socket.IO upload notification
+    try {
+      io.emit('item_uploaded', {
+        category: 'cloud_media',
+        filename: safeFilename,
+        publicUrl
+      });
+    } catch (wsErr) {
+      console.warn('Socket emit notice:', wsErr);
+    }
 
     console.log(`[Media Upload] Successfully saved media file: ${safeFilename} -> ${publicUrl}`);
-    return res.json({ success: true, url: publicUrl, filename: safeFilename });
+    return res.json({ success: true, url: publicUrl, relativeUrl: `/uploads/${safeFilename}`, filename: safeFilename });
   } catch (err: any) {
     console.error('[Media Upload Error]', err);
     return res.status(500).json({ error: err.message || 'Failed to save upload' });
@@ -551,6 +593,16 @@ app.post('/api/dual-sync/upload', async (req, res) => {
   } catch (error: any) {
     console.error('Error executing dual sync upload:', error);
     res.status(500).json({ error: error.message || 'Dual sync upload failed on server' });
+  }
+});
+
+// Get Cloud Media Storage files from Cloud SQL
+app.get('/api/cloud-media-files', async (req, res) => {
+  try {
+    const files = await getCloudMediaFiles();
+    res.json({ success: true, count: files.length, files });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'Failed to fetch cloud media files' });
   }
 });
 

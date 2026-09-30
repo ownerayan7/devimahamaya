@@ -14,8 +14,8 @@ import {
 import { PrayerItem } from '../types';
 import { getVideoBlob } from '../utils/videoStorageHelper';
 import { getDriveVideoEmbedUrl, extractDriveFileId } from '../utils/driveHelper';
+import { parseUniversalMedia, getPublicMediaUrl } from '../utils/mediaEmbedHelper';
 import { registerHtmlMediaElement, subscribeToMediaStop } from '../utils/mediaCoordinator';
-import { formatPublicUrl } from '../utils/uploadHelper';
 
 interface CustomPrayerCardProps {
   item: PrayerItem;
@@ -44,28 +44,24 @@ export const CustomPrayerCard: React.FC<CustomPrayerCardProps> = ({
     let isMounted = true;
     let createdUrl: string | null = null;
 
-    const publicMediaUrl = formatPublicUrl(item.mediaUrl || item.embedUrl || '');
-
-    if (publicMediaUrl && (publicMediaUrl.startsWith('http://') || publicMediaUrl.startsWith('https://') || publicMediaUrl.startsWith('/uploads/'))) {
-      setResolvedUrl(publicMediaUrl);
-    } else if (item.mediaSource === 'local') {
+    if (item.mediaSource === 'local') {
       getVideoBlob(item.id)
         .then((blob) => {
           if (!isMounted) return;
           if (blob && blob instanceof Blob) {
             createdUrl = URL.createObjectURL(blob);
             setResolvedUrl(createdUrl);
-          } else if (publicMediaUrl) {
-            setResolvedUrl(publicMediaUrl);
+          } else if (item.mediaUrl) {
+            setResolvedUrl(item.mediaUrl);
           }
         })
         .catch(() => {
-          if (isMounted && publicMediaUrl) {
-            setResolvedUrl(publicMediaUrl);
+          if (isMounted && item.mediaUrl) {
+            setResolvedUrl(item.mediaUrl);
           }
         });
     } else {
-      setResolvedUrl(publicMediaUrl);
+      setResolvedUrl(item.mediaUrl);
     }
 
     return () => {
@@ -74,10 +70,11 @@ export const CustomPrayerCard: React.FC<CustomPrayerCardProps> = ({
         URL.revokeObjectURL(createdUrl);
       }
     };
-  }, [item.id, item.mediaSource, item.mediaUrl, item.embedUrl]);
+  }, [item.id, item.mediaSource, item.mediaUrl]);
 
   const mediaSrc = resolvedUrl || item.mediaUrl;
-  let embedSrc = item.embedUrl || mediaSrc;
+  const parsed = parseUniversalMedia(mediaSrc, item.type);
+  let embedSrc = parsed.embedUrl || item.embedUrl || mediaSrc;
 
   if (extractDriveFileId(mediaSrc)) {
     embedSrc = getDriveVideoEmbedUrl(mediaSrc);
@@ -85,15 +82,11 @@ export const CustomPrayerCard: React.FC<CustomPrayerCardProps> = ({
 
   const isDirectVideo =
     item.type === 'video' &&
-    (item.mediaSource === 'local' ||
+    (parsed.isDirectVideo ||
+      item.mediaSource === 'local' ||
       mediaSrc.startsWith('data:') ||
       mediaSrc.startsWith('blob:') ||
-      embedSrc.startsWith('data:') ||
-      embedSrc.startsWith('blob:') ||
-      mediaSrc.includes('.mp4') ||
-      mediaSrc.includes('.webm') ||
-      mediaSrc.includes('.mov') ||
-      (!mediaSrc.includes('youtube.com') && !mediaSrc.includes('youtu.be') && !mediaSrc.includes('facebook.com')));
+      mediaSrc.includes('/uploads/'));
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -187,7 +180,7 @@ export const CustomPrayerCard: React.FC<CustomPrayerCardProps> = ({
           isDirectVideo ? (
             <video
               ref={videoRef}
-              src={mediaSrc}
+              src={getPublicMediaUrl(mediaSrc)}
               controls
               playsInline
               preload="metadata"
@@ -195,7 +188,7 @@ export const CustomPrayerCard: React.FC<CustomPrayerCardProps> = ({
             />
           ) : (
             <iframe
-              src={embedSrc}
+              src={parsed.embedUrl || embedSrc}
               title={item.title}
               className="w-full h-full border-0"
               allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
@@ -217,7 +210,7 @@ export const CustomPrayerCard: React.FC<CustomPrayerCardProps> = ({
             </div>
             <audio
               ref={audioRef}
-              src={mediaSrc}
+              src={getPublicMediaUrl(mediaSrc)}
               controls
               className="w-full max-w-md rounded-xl shadow-md border border-amber-500/30"
               preload="metadata"

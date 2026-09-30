@@ -34,6 +34,7 @@ import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firesto
 import { sendAppNotification } from '../utils/notificationHelper';
 import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
 import { socket } from '../lib/socket';
+import { getPublicMediaUrl } from '../utils/mediaEmbedHelper';
 
 const LOCAL_STORAGE_KEY = '11star_custom_official_videos_v2';
 
@@ -411,11 +412,11 @@ export const VideosPage: React.FC<VideosPageProps> = ({ onOpenAdminStorage }) =>
           const freshBlobUrl = URL.createObjectURL(storedBlob as Blob);
           setActiveVideoFileUrl(freshBlobUrl);
         } else if (video.videoFileUrl) {
-          setActiveVideoFileUrl(video.videoFileUrl);
+          setActiveVideoFileUrl(getPublicMediaUrl(video.videoFileUrl));
         }
       } catch {
         if (video.videoFileUrl) {
-          setActiveVideoFileUrl(video.videoFileUrl);
+          setActiveVideoFileUrl(getPublicMediaUrl(video.videoFileUrl));
         }
       }
     } else {

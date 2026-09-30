@@ -24,7 +24,7 @@ import { AdminPhotoAuthModal } from '../components/AdminPhotoAuthModal';
 import { CustomPrayerCard } from '../components/CustomPrayerCard';
 import { LivePrayerSettingsModal } from '../components/LivePrayerSettingsModal';
 import { deleteVideoBlob, getVideoBlob } from '../utils/videoStorageHelper';
-import { isDirectVideoUrl } from '../utils/mediaEmbedHelper';
+import { isDirectVideoUrl, parseUniversalMedia, getPublicMediaUrl } from '../utils/mediaEmbedHelper';
 import { db } from '../lib/firebase';
 import { doc, onSnapshot, setDoc, collection, addDoc, deleteDoc } from 'firebase/firestore';
 import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
@@ -213,12 +213,17 @@ export const SundayPrayerPage: React.FC = () => {
       if (data && data.category === 'prayer_item' && data.item) {
         console.log('[WebSocket] Real-time prayer received:', data.item);
         const newPrayer = data.item;
-        loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((local) => {
-          if (local.some((p) => p.id === newPrayer.id)) return;
-          const updatedCustom = [newPrayer, ...local];
+        if (data.replacePrevious) {
+          const updatedCustom = [newPrayer];
           savePersistentItems(LOCAL_STORAGE_KEY, updatedCustom);
-          setItems([...updatedCustom, ...INITIAL_PRAYER_ITEMS.filter(p => !updatedCustom.some(i => i.id === p.id))]);
-        });
+          setItems([...updatedCustom, ...INITIAL_PRAYER_ITEMS]);
+        } else {
+          loadPersistentItems<PrayerItem>(LOCAL_STORAGE_KEY).then((local) => {
+            const updatedCustom = [newPrayer, ...local.filter(p => p.id !== newPrayer.id)];
+            savePersistentItems(LOCAL_STORAGE_KEY, updatedCustom);
+            setItems([...updatedCustom, ...INITIAL_PRAYER_ITEMS]);
+          });
+        }
       }
     };
 
@@ -293,10 +298,19 @@ export const SundayPrayerPage: React.FC = () => {
       synced: false
     } as any;
 
-    const updated = [itemWithTime, ...items.filter(i => i.id !== itemWithTime.id)];
+    // Purge previous custom prayers so ONLY THIS NEW PRAYER remains active
+    const oldCustomItems = items.filter(i => i.isCustom && i.id !== itemWithTime.id);
+    for (const oldItem of oldCustomItems) {
+      try {
+        await deleteDoc(doc(db, 'prayerItems', String(oldItem.id)));
+      } catch (err) {
+        console.warn('Failed to delete old prayer document from Firestore:', err);
+      }
+    }
+
+    const updated = [itemWithTime, ...INITIAL_PRAYER_ITEMS];
     setItems(updated);
-    const customItems = updated.filter((i) => i.isCustom);
-    await savePersistentItems(LOCAL_STORAGE_KEY, customItems);
+    await savePersistentItems(LOCAL_STORAGE_KEY, [itemWithTime]);
 
     // Automatically set as the main Active Prayer video/media on the top player for ALL devices in the world
     const newLiveConfig = {
@@ -326,7 +340,7 @@ export const SundayPrayerPage: React.FC = () => {
     }
 
     if (socket) {
-      socket.emit('upload_item', { category: 'prayer_item', item: itemWithTime });
+      socket.emit('upload_item', { category: 'prayer_item', item: itemWithTime, replacePrevious: true });
       socket.emit('upload_item', { category: 'active_prayer', item: newLiveConfig });
     }
 
@@ -426,6 +440,22 @@ export const SundayPrayerPage: React.FC = () => {
             আগুনের পরশমণি ছোঁয়াও প্রাণে — 11 স্টার ক্লাবের সমবেত ও পবিত্র প্রার্থনা। অন্তরের সকল মলিনতা দূর করে পুণ্যের আলোয় জীবনকে উদ্ভাসিত করার নিবেদন।
           </p>
 
+          {/* Active Multi-Cloud & Realtime Badges */}
+          <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+              ⚡ Express Binary CDN Active
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold">
+              🔥 Google Firebase Active
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold">
+              🐘 PostgreSQL Cloud SQL Active
+            </span>
+            <span className="px-2.5 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold">
+              🌐 Socket.IO Real-Time Sync
+            </span>
+          </div>
+
           {/* Admin Action Buttons */}
           <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
             <button
@@ -495,35 +525,66 @@ export const SundayPrayerPage: React.FC = () => {
         {/* Live or Fallback Player */}
         <div className="aspect-video w-full rounded-2xl overflow-hidden border-2 border-red-500/30 bg-black shadow-2xl relative">
           {liveConfig.isLiveActive ? (
-            <iframe
-              src={liveConfig.liveUrl}
-              title="Live Prayer Broadcast"
-              className="w-full h-full border-0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-            />
+            (() => {
+              const parsedLive = parseUniversalMedia(liveConfig.liveUrl, 'video');
+              if (parsedLive.isDirectVideo) {
+                return (
+                  <video
+                    controls
+                    autoPlay
+                    playsInline
+                    src={getPublicMediaUrl(parsedLive.embedUrl || liveConfig.liveUrl)}
+                    className="w-full h-full object-contain bg-black"
+                  />
+                );
+              }
+              return (
+                <iframe
+                  src={parsedLive.embedUrl || liveConfig.liveUrl}
+                  title="Live Prayer Broadcast"
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              );
+            })()
           ) : resolvedFallbackBlobUrl ? (
             <video
               controls
               playsInline
-              src={resolvedFallbackBlobUrl}
+              src={getPublicMediaUrl(resolvedFallbackBlobUrl)}
               className="w-full h-full object-contain bg-black"
             />
           ) : isDirectVideoUrl(liveConfig.fallbackUrl) ? (
             <video
               controls
               playsInline
-              src={liveConfig.fallbackUrl}
+              src={getPublicMediaUrl(liveConfig.fallbackUrl)}
               className="w-full h-full object-contain bg-black"
             />
           ) : liveConfig.fallbackUrl ? (
-            <iframe
-              src={liveConfig.fallbackUrl}
-              title={liveConfig.fallbackTitle || 'Prayer Video'}
-              className="w-full h-full border-0"
-              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
-              allowFullScreen
-            />
+            (() => {
+              const parsedFallback = parseUniversalMedia(liveConfig.fallbackUrl, 'video');
+              if (parsedFallback.isDirectVideo) {
+                return (
+                  <video
+                    controls
+                    playsInline
+                    src={getPublicMediaUrl(parsedFallback.embedUrl || liveConfig.fallbackUrl)}
+                    className="w-full h-full object-contain bg-black"
+                  />
+                );
+              }
+              return (
+                <iframe
+                  src={parsedFallback.embedUrl || liveConfig.fallbackUrl}
+                  title={liveConfig.fallbackTitle || 'Prayer Video'}
+                  className="w-full h-full border-0"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              );
+            })()
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center p-6 text-center bg-stone-950 text-amber-100/90 space-y-3">
               <Flame className="w-12 h-12 text-amber-400 animate-pulse" />

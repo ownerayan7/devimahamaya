@@ -14,6 +14,27 @@ export interface ParsedMedia {
   isValid: boolean;
 }
 
+export function getPublicMediaUrl(url: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (trimmed.startsWith('data:') || trimmed.startsWith('blob:')) return trimmed;
+  
+  if (trimmed.startsWith('/uploads/')) {
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}${trimmed}`;
+    }
+    return trimmed;
+  }
+  
+  if (trimmed.includes('localhost') || trimmed.includes('127.0.0.1')) {
+    const idx = trimmed.indexOf('/uploads/');
+    if (idx !== -1 && typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}${trimmed.substring(idx)}`;
+    }
+  }
+  return trimmed;
+}
+
 export function isFacebookVideoUrl(url: string): boolean {
   if (!url) return false;
   return /facebook\.com\/(?:.+?\/videos\/\d+|reel\/\d+|watch\/\?v=\d+|watch|video\.php\?v=\d+)|fb\.watch\//i.test(url.trim());
@@ -31,9 +52,7 @@ export function isDirectVideoUrl(url: string): boolean {
     clean.startsWith('blob:') ||
     clean.startsWith('data:video') ||
     clean.includes('/uploads/') ||
-    clean.includes('cloudinary.com') ||
-    clean.includes('firebasestorage') ||
-    /\.(mp4|webm|mov|m4v|ogv|m3u8|avi|mkv|3gp)(\?.*)?$/i.test(clean)
+    /\.(mp4|webm|mov|m4v|ogv|mkv|3gp|avi)(\?.*)?$/i.test(clean)
   );
 }
 
@@ -42,7 +61,8 @@ export function parseUniversalMedia(input: string, explicitType?: 'video' | 'aud
     return { type: 'unknown', embedUrl: '', isValid: false };
   }
 
-  const trimmed = input.trim();
+  const rawTrimmed = input.trim();
+  const trimmed = getPublicMediaUrl(rawTrimmed);
 
   // 1. YouTube
   const youtubeId = extractYouTubeId(trimmed);
@@ -105,8 +125,8 @@ export function parseUniversalMedia(input: string, explicitType?: 'video' | 'aud
     };
   }
 
-  // 5. Direct Video file or Blob
-  if (isDirectVideoUrl(trimmed) || (explicitType === 'video' && (trimmed.startsWith('blob:') || trimmed.startsWith('data:')))) {
+  // 5. Direct Video file, Blob, or /uploads/ server video
+  if (isDirectVideoUrl(trimmed) || trimmed.includes('/uploads/') || (explicitType === 'video' && (trimmed.startsWith('blob:') || trimmed.startsWith('data:')))) {
     return {
       type: 'direct-video',
       embedUrl: trimmed,

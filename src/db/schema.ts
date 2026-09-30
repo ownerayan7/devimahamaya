@@ -60,6 +60,18 @@ export const syncLogs = pgTable('sync_logs', {
   createdAt: timestamp('created_at').defaultNow(),
 });
 
+// Persistent Cloud Media Storage table in PostgreSQL
+export const mediaCloudFiles = pgTable('media_cloud_files', {
+  id: serial('id').primaryKey(),
+  filename: text('filename').notNull().unique(),
+  mimeType: text('mime_type').notNull(),
+  publicUrl: text('public_url').notNull(),
+  category: text('category').default('general'),
+  sizeBytes: integer('size_bytes'),
+  uploadedBy: text('uploaded_by'),
+  createdAt: timestamp('created_at').defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ many }) => ({
   records: many(clubRecords),

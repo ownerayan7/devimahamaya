@@ -27,8 +27,23 @@ export const AdminStorageAccessCard: React.FC<AdminStorageAccessCardProps> = ({ 
               🔒 অ্যাডমিন লকড ক্লাব ডাটা স্টোরেজ ও ফাইল ম্যানেজার
             </h4>
             <p className="text-xs sm:text-sm text-stone-300 mt-1 max-w-xl">
-              সকল আপলোডকৃত ছবি, ভিডিও, নোটিশ ও ফাইলের গোপন কেন্দ্রীয় ভাণ্ডার। শুধুমাত্র পাসওয়ার্ড দিয়ে আনলক ও পরিচালনা করা যায় (পাবলিক নয়)।
+              সকল আপলোডকৃত ছবি, ভিডিও, নোটিশ ও ফাইলের গোপন কেন্দ্রীয় ভাণ্ডার। গুগল ক্লাউড (Firebase), পোস্টগ্রে-এসকিউএল (Cloud SQL), এক্সপ্রেস বাইনারি স্ট্রিমিং সিডিএন ও সকেট রিয়েল-টাইম সিঙ্ক সক্রিয় রয়েছে।
             </p>
+            {/* Active Multi-Cloud Engine Badges */}
+            <div className="flex flex-wrap gap-1.5 mt-2.5">
+              <span className="px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold">
+                ⚡ Express Binary CDN
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30 text-[10px] font-bold">
+                🔥 Google Firebase Storage
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30 text-[10px] font-bold">
+                🐘 PostgreSQL Cloud SQL
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30 text-[10px] font-bold">
+                🌐 Socket.IO Real-Time Sync
+              </span>
+            </div>
           </div>
         </div>
 

@@ -18,8 +18,8 @@ import { MemberPhotoItem } from '../types';
 import { getDriveDirectImageUrl } from '../utils/driveHelper';
 import { getAppStorage } from '../lib/firebase';
 import { optimizeImage } from '../utils/imageOptimizer';
-import { uploadMediaFile } from '../utils/uploadHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
+import { uploadMediaFile } from '../utils/uploadHelper';
 
 interface MemberPhotoUploadModalProps {
   isOpen: boolean;
@@ -115,13 +115,11 @@ export const MemberPhotoUploadModal: React.FC<MemberPhotoUploadModalProps> = ({
         return;
       }
       try {
-        const uploadedCloudUrl = await uploadMediaFile(imageFile, 'memberPhotos');
-        if (uploadedCloudUrl) {
-          finalImageUrl = uploadedCloudUrl;
-        } else {
-          const compressedBase64 = await optimizeImage(imageFile, 1280, 1280, 0.82);
-          finalImageUrl = compressedBase64;
-        }
+        // First optimize and compress image to high-efficiency webp/jpeg (<150KB)
+        const compressedBase64 = await optimizeImage(imageFile, 1280, 1280, 0.82);
+        
+        const serverUrl = await uploadMediaFile(imageFile, 'memberPhotos');
+        finalImageUrl = serverUrl || compressedBase64;
       } catch (e) {
         console.error('Image processing failed:', e);
         setErrorMsg('ছবি প্রক্রিয়াকরণ করতে সমস্যা হয়েছে, অনুগ্রহ করে পুনরায় চেষ্টা করুন।');

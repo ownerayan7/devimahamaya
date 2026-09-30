@@ -1,5 +1,5 @@
 import { db } from './index.ts';
-import { users, clubRecords, treePlantationRecords, workspaceItems, syncLogs } from './schema.ts';
+import { users, clubRecords, treePlantationRecords, workspaceItems, syncLogs, mediaCloudFiles } from './schema.ts';
 import { eq, desc } from 'drizzle-orm';
 
 export async function getOrCreateUser(uid: string, email: string, displayName?: string, photoURL?: string) {
@@ -185,5 +185,43 @@ export async function deleteSyncLog(id: number) {
   } catch (error) {
     console.error('Database deleteSyncLog failed:', error);
     return false;
+  }
+}
+
+export async function saveCloudMediaFile(filename: string, mimeType: string, publicUrl: string, category?: string, sizeBytes?: number, uploadedBy?: string) {
+  try {
+    if (!db) return { id: Date.now(), filename, mimeType, publicUrl, category, sizeBytes, uploadedBy };
+    const result = await db.insert(mediaCloudFiles)
+      .values({
+        filename,
+        mimeType,
+        publicUrl,
+        category: category || 'general',
+        sizeBytes: sizeBytes || 0,
+        uploadedBy: uploadedBy || 'User Upload',
+      })
+      .onConflictDoUpdate({
+        target: mediaCloudFiles.filename,
+        set: {
+          publicUrl,
+          category: category || 'general',
+          sizeBytes: sizeBytes || 0,
+        }
+      })
+      .returning();
+    return result[0];
+  } catch (error) {
+    console.error('Database saveCloudMediaFile failed:', error);
+    return { id: Date.now(), filename, mimeType, publicUrl, category, sizeBytes, uploadedBy };
+  }
+}
+
+export async function getCloudMediaFiles() {
+  try {
+    if (!db) return [];
+    return await db.select().from(mediaCloudFiles).orderBy(desc(mediaCloudFiles.createdAt)).limit(100);
+  } catch (error) {
+    console.error('Database getCloudMediaFiles failed:', error);
+    return [];
   }
 }

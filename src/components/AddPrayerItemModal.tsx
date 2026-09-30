@@ -22,7 +22,7 @@ import { extractYouTubeId, getYouTubeThumbnail } from '../utils/youtubeHelper';
 import { extractDriveFileId, getDriveDirectImageUrl } from '../utils/driveHelper';
 import { sendAppNotification } from '../utils/notificationHelper';
 import { saveVideoBlob, generateVideoThumbnail } from '../utils/videoStorageHelper';
-import { uploadMediaFile } from '../utils/uploadHelper';
+import { uploadMediaFile, formatPublicUrl } from '../utils/uploadHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 import { convertFileToDataUrl } from '../utils/fileConverter';
 
@@ -134,8 +134,19 @@ export const AddPrayerItemModal: React.FC<AddPrayerItemModalProps> = ({
       setIsSubmitting(true);
 
       const uploadedUrl = await uploadMediaFile(selectedFile, 'prayerMedia');
-      mediaUrl = uploadedUrl || filePreview;
-      embedUrl = uploadedUrl || filePreview;
+      let cleanUrl = uploadedUrl ? formatPublicUrl(uploadedUrl) : '';
+      
+      // Fail-proof fallback: Convert to Data URL if upload url is missing or blob
+      if (!cleanUrl || cleanUrl.startsWith('blob:')) {
+        try {
+          cleanUrl = await convertFileToDataUrl(selectedFile);
+        } catch (dataErr) {
+          cleanUrl = filePreview;
+        }
+      }
+
+      mediaUrl = cleanUrl;
+      embedUrl = cleanUrl;
       thumbnailUrl = '';
       mediaSource = 'local';
     }

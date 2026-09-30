@@ -21,6 +21,7 @@ import { MemberVideoItem, VideoItem } from '../types';
 import { INITIAL_MEMBER_VIDEOS } from '../data/memberVideosData';
 import { MemberVideoUploadModal } from './MemberVideoUploadModal';
 import { getYouTubeThumbnail } from '../utils/youtubeHelper';
+import { getPublicMediaUrl } from '../utils/mediaEmbedHelper';
 import { CLUB_INFO } from '../data/clubData';
 import { deleteVideoBlob, getVideoBlob } from '../utils/videoStorageHelper';
 import { copyTextToClipboard } from '../utils/clipboardHelper';
@@ -30,7 +31,6 @@ import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firesto
 import { uploadToFallbackServer } from '../utils/persistentStorage';
 import { socket } from '../lib/socket';
 import { sendAppNotification } from '../utils/notificationHelper';
-import { formatPublicUrl } from '../utils/uploadHelper';
 
 const STORAGE_KEY = '11star_member_community_videos_v2';
 const LIKES_STORAGE_KEY = '11star_member_video_likes_v2';
@@ -72,20 +72,19 @@ export const MemberCommunityVideos: React.FC<MemberCommunityVideosProps> = () =>
     broadcastMediaPlaybackStarted(`member-video-${v.id}`, v.videoType === 'local' ? 'video' : 'youtube');
 
     if (v.videoType === 'local' || Boolean(v.videoFileUrl)) {
-      const publicUrl = formatPublicUrl(v.videoFileUrl || '');
-      if (publicUrl && !publicUrl.startsWith('blob:')) {
-        setSelectedFileUrl(publicUrl);
+      if (v.videoFileUrl && !v.videoFileUrl.startsWith('blob:')) {
+        setSelectedFileUrl(getPublicMediaUrl(v.videoFileUrl));
       } else {
         const blobData = await getVideoBlob(v.id);
         if (blobData) {
           if (typeof blobData === 'string') {
-            setSelectedFileUrl(blobData);
+            setSelectedFileUrl(getPublicMediaUrl(blobData));
           } else {
             const url = URL.createObjectURL(blobData);
             setSelectedFileUrl(url);
           }
         } else if (v.videoFileUrl) {
-          setSelectedFileUrl(v.videoFileUrl);
+          setSelectedFileUrl(getPublicMediaUrl(v.videoFileUrl));
         }
       }
     } else {

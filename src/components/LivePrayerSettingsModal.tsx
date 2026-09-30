@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { parseUniversalMedia } from '../utils/mediaEmbedHelper';
 import { saveVideoBlob } from '../utils/videoStorageHelper';
+import { uploadMediaFile } from '../utils/uploadHelper';
 
 interface LivePrayerSettingsModalProps {
   isOpen: boolean;
@@ -95,8 +96,15 @@ export const LivePrayerSettingsModal: React.FC<LivePrayerSettingsModalProps> = (
       blobId = `prayer-live-fallback-permanent`;
       isLocalBlob = true;
       try {
-        await saveVideoBlob(blobId, selectedFile);
-        finalFallbackUrl = '';
+        const uploadedUrl = await uploadMediaFile(selectedFile, 'prayerFallback');
+        if (uploadedUrl) {
+          finalFallbackUrl = uploadedUrl;
+          blobId = '';
+          isLocalBlob = false;
+        } else {
+          await saveVideoBlob(blobId, selectedFile);
+          finalFallbackUrl = '';
+        }
       } catch (err) {
         console.warn('Error saving fallback video blob:', err);
       }
@@ -107,9 +115,12 @@ export const LivePrayerSettingsModal: React.FC<LivePrayerSettingsModalProps> = (
       isLocalBlob = false;
     }
 
+    const parsedLive = parseUniversalMedia(liveUrl.trim(), 'video');
+    const finalLiveUrl = parsedLive.embedUrl || liveUrl.trim();
+
     onSaveConfig({
       isLiveActive,
-      liveUrl: liveUrl.trim() || 'https://www.youtube-nocookie.com/embed/wm1OtR2kEVc?enablejsapi=1&autoplay=1',
+      liveUrl: finalLiveUrl || 'https://www.youtube-nocookie.com/embed/wm1OtR2kEVc?enablejsapi=1&autoplay=1',
       fallbackTitle: fallbackTitle.trim() || 'আজকের রেকর্ডড প্রার্থনা ও গ্যালারি ভিডিও',
       fallbackUrl: finalFallbackUrl,
       blobId,
