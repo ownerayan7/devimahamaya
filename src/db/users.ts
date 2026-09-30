@@ -191,6 +191,22 @@ export async function deleteSyncLog(id: number) {
 export async function saveCloudMediaFile(filename: string, mimeType: string, publicUrl: string, category?: string, sizeBytes?: number, uploadedBy?: string) {
   try {
     if (!db) return { id: Date.now(), filename, mimeType, publicUrl, category, sizeBytes, uploadedBy };
+    
+    // Check if entry already exists to prevent ON CONFLICT target mismatch errors
+    const existing = await db.select().from(mediaCloudFiles).where(eq(mediaCloudFiles.filename, filename)).limit(1);
+    
+    if (existing && existing.length > 0) {
+      const updated = await db.update(mediaCloudFiles)
+        .set({
+          publicUrl,
+          category: category || 'general',
+          sizeBytes: sizeBytes || 0,
+        })
+        .where(eq(mediaCloudFiles.filename, filename))
+        .returning();
+      return updated[0] || existing[0];
+    }
+
     const result = await db.insert(mediaCloudFiles)
       .values({
         filename,
@@ -199,14 +215,6 @@ export async function saveCloudMediaFile(filename: string, mimeType: string, pub
         category: category || 'general',
         sizeBytes: sizeBytes || 0,
         uploadedBy: uploadedBy || 'User Upload',
-      })
-      .onConflictDoUpdate({
-        target: mediaCloudFiles.filename,
-        set: {
-          publicUrl,
-          category: category || 'general',
-          sizeBytes: sizeBytes || 0,
-        }
       })
       .returning();
     return result[0];

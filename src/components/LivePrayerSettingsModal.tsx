@@ -13,7 +13,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { parseUniversalMedia } from '../utils/mediaEmbedHelper';
-import { saveVideoBlob } from '../utils/videoStorageHelper';
+import { saveVideoBlob, deleteVideoBlob } from '../utils/videoStorageHelper';
 import { uploadMediaFile } from '../utils/uploadHelper';
 
 interface LivePrayerSettingsModalProps {
@@ -302,22 +302,50 @@ export const LivePrayerSettingsModal: React.FC<LivePrayerSettingsModalProps> = (
             )}
           </div>
 
-          <div className="pt-4 flex items-center justify-end gap-3 border-t border-amber-500/20">
+          <div className="pt-4 flex items-center justify-between gap-3 border-t border-amber-500/20">
             <button
               type="button"
-              onClick={onClose}
-              className="px-5 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-stone-300 text-xs font-bold transition-colors"
+              onClick={async () => {
+                try {
+                  await deleteVideoBlob('prayer-live-fallback-permanent');
+                } catch (e) {
+                  console.warn('Error deleting video blob:', e);
+                }
+                setSelectedFile(null);
+                setFilePreview('');
+                setFallbackUrlInput('');
+                onSaveConfig({
+                  ...currentConfig,
+                  fallbackUrl: 'https://www.youtube-nocookie.com/embed/wm1OtR2kEVc?enablejsapi=1&rel=0',
+                  blobId: '',
+                  isLocalBlob: false
+                });
+                setSuccess('পুরাতন আপলোড ও স্টোরেজ সফলভাবে খালি/রিসেট করা হয়েছে!');
+                setTimeout(() => setSuccess(''), 2000);
+              }}
+              className="px-3.5 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95"
             >
-              বাতিল
+              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+              <span>পুরাতন ভিডিও ও স্টোরেজ খালি করুন</span>
             </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs font-bold transition-all shadow-md active:scale-95 disabled:opacity-50 flex items-center gap-2"
-            >
-              <Sparkles className="w-4 h-4" />
-              <span>{isSubmitting ? 'সংরক্ষণ হচ্ছে...' : 'সেটিংস সংরক্ষণ করুন'}</span>
-            </button>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/15 text-stone-300 text-xs font-bold transition-colors"
+              >
+                বাতিল
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs font-bold transition-all shadow-md active:scale-95 disabled:opacity-50 flex items-center gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>{isSubmitting ? 'সংরক্ষণ হচ্ছে...' : 'সেটিংস সংরক্ষণ করুন'}</span>
+              </button>
+            </div>
           </div>
         </form>
       </motion.div>

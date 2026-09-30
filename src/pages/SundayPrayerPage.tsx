@@ -459,11 +459,12 @@ export const SundayPrayerPage: React.FC = () => {
           {/* Admin Action Buttons */}
           <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
             <button
-              onClick={() => setIsAdminAuthModalOpen(true)}
+              id="live-settings-trigger-btn"
+              onClick={() => setIsLiveAuthOpen(true)}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 via-amber-400 to-yellow-500 hover:from-amber-400 hover:to-yellow-400 text-black text-xs sm:text-sm font-extrabold transition-all shadow-[0_0_20px_rgba(245,158,11,0.35)] hover:scale-105 active:scale-95 cursor-pointer"
             >
-              <Plus className="w-4 h-4 text-black shrink-0" />
-              <span>প্রার্থনা ভিডিও/অডিও আপলোড করুন (অ্যাডমিন)</span>
+              <Radio className="w-4 h-4 text-black animate-pulse" />
+              <span>⚙️ লাইভ ও গ্যালারি প্রার্থনা ভিডিও আপডেট করুন (অ্যাডমিন)</span>
             </button>
 
             <button
@@ -473,15 +474,6 @@ export const SundayPrayerPage: React.FC = () => {
             >
               <BellRing className="w-4 h-4 text-amber-300 animate-pulse" />
               <span>প্রার্থনার অ্যালার্ট সেট করুন (অ্যাডমিন)</span>
-            </button>
-
-            <button
-              id="live-settings-trigger-btn"
-              onClick={() => setIsLiveAuthOpen(true)}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600/30 hover:bg-red-600/40 border border-red-500 text-red-200 text-xs font-bold transition-all shadow active:scale-95"
-            >
-              <Radio className="w-4 h-4 text-red-400 animate-pulse" />
-              <span>⚙️ লাইভ ও গ্যালারি ব্যাকআপ সেটিংস</span>
             </button>
           </div>
         </div>
