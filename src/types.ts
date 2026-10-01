@@ -129,7 +129,7 @@ export interface VideoItem {
   description: string;
   youtubeId?: string;
   youtubeUrl?: string;
-  videoType?: 'youtube' | 'local' | 'direct';
+  videoType?: 'youtube' | 'local' | 'direct' | 'stream';
   videoFileUrl?: string;
   thumbnailUrl?: string;
   category: 'durga-puja' | 'social' | 'cultural' | 'shorts' | 'theme' | string;
@@ -149,7 +149,7 @@ export interface MemberVideoItem {
   authorRole?: string;
   youtubeId: string;
   youtubeUrl: string;
-  videoType?: 'youtube' | 'local' | 'direct';
+  videoType?: 'youtube' | 'local' | 'direct' | 'stream';
   videoFileUrl?: string;
   thumbnailUrl?: string;
   category: 'puja' | 'live' | 'cultural' | 'social' | 'shorts' | 'memories' | string;

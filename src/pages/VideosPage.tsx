@@ -28,9 +28,11 @@ import { INITIAL_MEMBER_VIDEOS } from '../data/memberVideosData';
 import { VideoItem, MemberVideoItem } from '../types';
 import { AddOfficialVideoModal } from '../components/AddOfficialVideoModal';
 import { MemberVideoUploadModal } from '../components/MemberVideoUploadModal';
+import { HlsVideoPlayer } from '../components/HlsVideoPlayer';
 import { AdminPhotoAuthModal } from '../components/AdminPhotoAuthModal';
 import { getVideoBlob, deleteVideoBlob } from '../utils/videoStorageHelper';
-import { parseUniversalMedia, getPublicMediaUrl, isFacebookVideoUrl } from '../utils/mediaEmbedHelper';
+import { parseUniversalMedia, getPublicMediaUrl, isFacebookVideoUrl, isInstagramUrl } from '../utils/mediaEmbedHelper';
+import { extractYouTubeId } from '../utils/youtubeHelper';
 import { copyTextToClipboard } from '../utils/clipboardHelper';
 import { broadcastMediaPlaybackStarted, subscribeToMediaStop, registerHtmlMediaElement } from '../utils/mediaCoordinator';
 import { getDeviceId, isDeviceUploader } from '../utils/deviceHelper';
@@ -210,9 +212,12 @@ export const VideosPage: React.FC<VideosPageProps> = () => {
     // Official Club Videos
     officialVideos.forEach((v) => {
       let vType: UnifiedVideoCardItem['videoType'] = 'youtube';
-      if (v.videoType === 'local' || Boolean(v.videoFileUrl)) {
+      const isStreamOrLocal = v.videoType === 'local' || v.videoType === 'stream' || (v.videoFileUrl && v.videoFileUrl.endsWith('.m3u8'));
+      if (isStreamOrLocal) {
         vType = 'local';
       } else if (v.youtubeUrl && isFacebookVideoUrl(v.youtubeUrl)) {
+        vType = 'facebook';
+      } else if (v.videoFileUrl && isFacebookVideoUrl(v.videoFileUrl)) {
         vType = 'facebook';
       }
 
@@ -242,9 +247,12 @@ export const VideosPage: React.FC<VideosPageProps> = () => {
     // Member Submitted Videos
     memberVideos.forEach((m) => {
       let vType: UnifiedVideoCardItem['videoType'] = 'youtube';
-      if (m.videoType === 'local' || Boolean(m.videoFileUrl)) {
+      const isStreamOrLocal = m.videoType === 'local' || m.videoType === 'stream' || (m.videoFileUrl && m.videoFileUrl.endsWith('.m3u8'));
+      if (isStreamOrLocal) {
         vType = 'local';
       } else if (m.youtubeUrl && isFacebookVideoUrl(m.youtubeUrl)) {
+        vType = 'facebook';
+      } else if (m.videoFileUrl && isFacebookVideoUrl(m.videoFileUrl)) {
         vType = 'facebook';
       }
 
@@ -810,9 +818,12 @@ interface VideoPlayerEngineProps {
 
 const VideoPlayerEngine: React.FC<VideoPlayerEngineProps> = ({ item, autoPlay = false }) => {
   const [resolvedBlobUrl, setResolvedBlobUrl] = useState<string>('');
-  const [loading, setLoading] = useState<boolean>(item.videoType === 'local');
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string>('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
+
+  const mediaUrl = item.youtubeUrl || item.videoFileUrl || '';
+  const parsed = parseUniversalMedia(mediaUrl);
 
   // Subscribe to mutual exclusivity media stop event
   useEffect(() => {
@@ -829,21 +840,23 @@ const VideoPlayerEngine: React.FC<VideoPlayerEngineProps> = ({ item, autoPlay = 
 
   // Register HTML5 Video Element with Media Coordinator
   useEffect(() => {
-    if (videoRef.current && (item.videoType === 'local' || resolvedBlobUrl)) {
+    if (videoRef.current && (parsed.type === 'direct-video' || parsed.type === 'local' || resolvedBlobUrl)) {
       const mediaId = `video-${item.id}`;
       const unsub = registerHtmlMediaElement(videoRef.current, mediaId, 'video');
       return () => unsub();
     }
-  }, [item.id, item.videoType, resolvedBlobUrl]);
+  }, [item.id, parsed.type, resolvedBlobUrl]);
 
-  // Resolve Local Video Blob / URL
+  // Resolve Local Video Blob / URL or HLS / Stream files
   useEffect(() => {
     let isMounted = true;
 
-    if (item.videoType === 'local' || Boolean(item.videoFileUrl)) {
+    const isStreamOrLocal = parsed.type === 'direct-video' || parsed.type === 'local' || mediaUrl.includes('.m3u8') || mediaUrl.includes('cloudflare') || mediaUrl.includes('bunny');
+    
+    if (isStreamOrLocal) {
       setLoading(true);
-      if (item.videoFileUrl && !item.videoFileUrl.startsWith('blob:')) {
-        setResolvedBlobUrl(getPublicMediaUrl(item.videoFileUrl));
+      if (mediaUrl && !mediaUrl.startsWith('blob:')) {
+        setResolvedBlobUrl(getPublicMediaUrl(mediaUrl));
         setLoading(false);
       } else {
         getVideoBlob(item.id).then((blobData) => {
@@ -855,8 +868,8 @@ const VideoPlayerEngine: React.FC<VideoPlayerEngineProps> = ({ item, autoPlay = 
               const url = URL.createObjectURL(blobData);
               setResolvedBlobUrl(url);
             }
-          } else if (item.videoFileUrl) {
-            setResolvedBlobUrl(getPublicMediaUrl(item.videoFileUrl));
+          } else if (mediaUrl) {
+            setResolvedBlobUrl(getPublicMediaUrl(mediaUrl));
           } else {
             setError('ভিডিও ফাইলটি পাওয়া যায়নি।');
           }
@@ -870,14 +883,16 @@ const VideoPlayerEngine: React.FC<VideoPlayerEngineProps> = ({ item, autoPlay = 
     return () => {
       isMounted = false;
     };
-  }, [item]);
+  }, [item, parsed.type, mediaUrl]);
 
   const handlePlayStart = () => {
     broadcastMediaPlaybackStarted(`video-${item.id}`, 'video', videoRef.current);
   };
 
-  // 1. Local Video or MP4 Direct File
-  if (item.videoType === 'local' || resolvedBlobUrl) {
+  const isStreamOrLocal = parsed.type === 'direct-video' || parsed.type === 'local' || mediaUrl.includes('.m3u8') || mediaUrl.includes('cloudflare') || mediaUrl.includes('bunny') || resolvedBlobUrl;
+
+  // 1. Stream or Local or direct MP4/M3U8
+  if (isStreamOrLocal) {
     if (loading) {
       return (
         <div className="w-full h-full flex flex-col items-center justify-center bg-stone-950 text-amber-400 text-xs space-y-2">
@@ -897,26 +912,21 @@ const VideoPlayerEngine: React.FC<VideoPlayerEngineProps> = ({ item, autoPlay = 
     }
 
     return (
-      <video
-        ref={videoRef}
-        src={resolvedBlobUrl}
-        controls
-        playsInline
-        preload="metadata"
-        autoPlay={autoPlay}
+      <HlsVideoPlayer
+        src={resolvedBlobUrl || mediaUrl}
         poster={item.thumbnailUrl}
+        autoPlay={autoPlay}
         onPlay={handlePlayStart}
-        className="w-full h-full object-contain bg-black"
       />
     );
   }
 
-  // 2. Facebook Video Embed
-  if (item.videoType === 'facebook' || (item.youtubeUrl && isFacebookVideoUrl(item.youtubeUrl))) {
-    const parsed = parseUniversalMedia(item.youtubeUrl || '');
+  // 2. Facebook or Instagram Embedded Video
+  if (parsed.type === 'facebook' || isFacebookVideoUrl(mediaUrl) || isInstagramUrl(mediaUrl)) {
+    const embedSrc = parsed.embedUrl || `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(mediaUrl)}&show_text=false`;
     return (
       <iframe
-        src={parsed.embedUrl || `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(item.youtubeUrl || '')}&show_text=false`}
+        src={embedSrc}
         className="w-full h-full border-0"
         allow="autoplay; clipboard-write; encrypted-media; picture-in-picture; web-share"
         allowFullScreen
@@ -925,8 +935,21 @@ const VideoPlayerEngine: React.FC<VideoPlayerEngineProps> = ({ item, autoPlay = 
     );
   }
 
-  // 3. YouTube Video Embed
-  const youtubeId = item.youtubeId || (item.youtubeUrl ? parseUniversalMedia(item.youtubeUrl).embedUrl : '_65N3D5zTYg');
+  // 3. Google Drive Video
+  if (parsed.type === 'drive') {
+    return (
+      <iframe
+        src={parsed.embedUrl}
+        className="w-full h-full border-0"
+        allow="autoplay; encrypted-media"
+        allowFullScreen
+        title={item.title}
+      />
+    );
+  }
+
+  // 4. YouTube Video Embed (Default Fallback)
+  const youtubeId = extractYouTubeId(mediaUrl) || item.youtubeId || '_65N3D5zTYg';
   const embedUrl = `https://www.youtube-nocookie.com/embed/${youtubeId}?enablejsapi=1&rel=0&modestbranding=1&playsinline=1${
     autoPlay ? '&autoplay=1' : ''
   }`;

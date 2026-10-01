@@ -6,7 +6,7 @@ export interface ClubStoredItem {
   id: string;
   title: string;
   type: 'photo' | 'video' | 'audio' | 'document' | 'other';
-  source: 'gallery' | 'online' | 'device' | 'drive';
+  source: 'gallery' | 'online' | 'device' | 'drive' | 'stream';
   url: string;
   thumbnailUrl?: string;
   authorName?: string;

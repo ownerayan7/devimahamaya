@@ -41,6 +41,16 @@ export function getFacebookVideoEmbedUrl(url: string): string {
   return `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(cleanUrl)}&show_text=false&t=0`;
 }
 
+export function isInstagramUrl(url: string): boolean {
+  if (!url) return false;
+  return /instagram\.com\/(?:p|reel|tv)\//i.test(url.trim());
+}
+
+export function getInstagramEmbedUrl(url: string): string {
+  const cleanUrl = url.trim().split('?')[0];
+  return `${cleanUrl.replace(/\/$/, '')}/embed/`;
+}
+
 export function isDirectVideoUrl(url: string): boolean {
   if (!url) return false;
   const clean = url.trim().toLowerCase();
@@ -80,6 +90,18 @@ export function parseUniversalMedia(input: string, explicitType?: 'video' | 'aud
       embedUrl: getFacebookVideoEmbedUrl(trimmed),
       sourceUrl: trimmed,
       thumbnailUrl: 'https://images.unsplash.com/photo-1518495973542-4542c06a5843?w=800&auto=format&fit=crop&q=80',
+      isDirectVideo: false,
+      isValid: true,
+    };
+  }
+
+  // 2.5 Instagram Video/Post
+  if (isInstagramUrl(trimmed)) {
+    return {
+      type: 'facebook', // Map to facebook/iframe rendering
+      embedUrl: getInstagramEmbedUrl(trimmed),
+      sourceUrl: trimmed,
+      thumbnailUrl: 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&auto=format&fit=crop&q=80',
       isDirectVideo: false,
       isValid: true,
     };

@@ -32,6 +32,7 @@
     "socket.io-client": "^4.8.4",
     "tsx": "^4.23.15",
     "typescript": "~5.8.2",
+    "video.js": "^8.24.1",
     "vite": "^6.2.3"
   },
   "devDependencies": {

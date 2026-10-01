@@ -1,9 +1,8 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import {
   X,
   Plus,
-  Video,
   Youtube,
   User,
   Tag as TagIcon,
@@ -13,19 +12,13 @@ import {
   Play,
   Sparkles,
   Users,
-  Clock,
-  Upload,
-  FileVideo,
-  Film,
-  Trash2
+  Radio
 } from 'lucide-react';
 import { MemberVideoItem } from '../types';
 import { extractYouTubeId, getYouTubeThumbnail, formatYouTubeWatchUrl } from '../utils/youtubeHelper';
-import { generateVideoThumbnail, saveVideoBlob } from '../utils/videoStorageHelper';
-import { uploadMediaFile } from '../utils/uploadHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
-import { convertFileToDataUrl } from '../utils/fileConverter';
 import { getDeviceId } from '../utils/deviceHelper';
+import { sendAppNotification } from '../utils/notificationHelper';
 
 interface MemberVideoUploadModalProps {
   isOpen: boolean;
@@ -56,70 +49,18 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
   onClose,
   onAddVideo
 }) => {
-  const [sourceType, setSourceType] = useState<'gallery' | 'youtube'>('gallery');
+  const [sourceType, setSourceType] = useState<'link' | 'stream'>('stream');
   const [authorName, setAuthorName] = useState('');
   const [authorRole, setAuthorRole] = useState('ক্লাব সদস্য');
   const [urlInput, setUrlInput] = useState('');
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoFilePreview, setVideoFilePreview] = useState<string>('');
-  const [thumbnailPreview, setThumbnailPreview] = useState<string>('');
+  const [streamUrl, setStreamUrl] = useState('');
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('puja');
-  const [duration, setDuration] = useState('সদস্য ভিডিও');
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [isProcessingFile, setIsProcessingFile] = useState(false);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!isOpen) return null;
-
-  const detectedYouTubeId = extractYouTubeId(urlInput);
-
-  const handleVideoFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('video/')) {
-      setError('অনুগ্রহ করে একটি সঠিক ভিডিও ফাইল (MP4, WebM, MOV ইত্যাদি) নির্বাচন করুন।');
-      return;
-    }
-
-    setError('');
-    setIsProcessingFile(true);
-    setVideoFile(file);
-
-    const objectUrl = URL.createObjectURL(file);
-    setVideoFilePreview(objectUrl);
-
-    try {
-      const { thumbnailUrl, durationStr } = await generateVideoThumbnail(file);
-      if (thumbnailUrl) setThumbnailPreview(thumbnailUrl);
-      if (durationStr) setDuration(durationStr);
-    } catch (err) {
-      console.warn('Thumbnail generation error:', err);
-    } finally {
-      setIsProcessingFile(false);
-    }
-
-    if (!title.trim()) {
-      const cleanName = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-      setTitle(cleanName);
-    }
-  };
-
-  const handleRemoveSelectedVideo = () => {
-    setVideoFile(null);
-    if (videoFilePreview) {
-      URL.revokeObjectURL(videoFilePreview);
-      setVideoFilePreview('');
-    }
-    setThumbnailPreview('');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
-  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -129,35 +70,47 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
       setError('অনুগ্রহ করে আপনার (সদস্যের) নাম লিখুন।');
       return;
     }
+    if (!title.trim()) {
+      setError('অনুগ্রহ করে ভিডিওটির একটি শিরোনাম দিন।');
+      return;
+    }
 
-    if (sourceType === 'youtube') {
+    if (sourceType === 'link') {
       if (!urlInput.trim()) {
-        setError('অনুগ্রহ করে YouTube ভিডিও বা শর্টস লিংক দিন।');
+        setError('অনুগ্রহ করে ভিডিও লিঙ্ক দিন।');
         return;
       }
 
-      const yId = extractYouTubeId(urlInput);
-      if (!yId) {
-        setError('সঠিক YouTube ভিডিও লিংক পাওয়া যায়নি। যেমন: https://www.youtube.com/watch?v=... বা https://youtu.be/...');
-        return;
-      }
+      // Automatic Thumbnail calculation & Video Type Correction
+      let calculatedThumbnail = '';
+      const ytId = extractYouTubeId(urlInput.trim());
+      const isPastedStream = urlInput.trim().includes('.m3u8') || urlInput.trim().includes('cloudflare') || urlInput.trim().includes('bunny');
+      const correctedVideoType = isPastedStream ? 'stream' : 'youtube';
 
-      if (!title.trim()) {
-        setError('অনুগ্রহ করে ভিডিওটির একটি শিরোনাম দিন।');
-        return;
+      if (ytId) {
+        calculatedThumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
+      } else if (isPastedStream) {
+        calculatedThumbnail = 'https://framerusercontent.com/images/yHxdiWReVZDcqvytpuT8C65KlaU.jpg?width=1314&height=666';
+      } else if (urlInput.trim().includes('facebook.com') || urlInput.trim().includes('fb.watch')) {
+        calculatedThumbnail = 'https://images.unsplash.com/photo-1504196606672-aef5c9cefc92?w=800&q=80';
+      } else if (urlInput.trim().includes('instagram.com')) {
+        calculatedThumbnail = 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80';
+      } else {
+        calculatedThumbnail = 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&q=80';
       }
-
+      
       const newVideo: MemberVideoItem = {
         id: `member-video-${Date.now()}`,
         title: title.trim(),
         description: description.trim() || 'ক্লাব সদস্যের শেয়ার করা বিশেষ মুহূর্ত।',
         authorName: authorName.trim(),
         authorRole: authorRole.trim() || 'ক্লাব সদস্য',
-        youtubeId: yId,
-        youtubeUrl: formatYouTubeWatchUrl(yId),
-        videoType: 'youtube',
+        youtubeId: ytId || 'link-member-video',
+        youtubeUrl: urlInput.trim(),
+        videoType: correctedVideoType,
+        videoFileUrl: urlInput.trim(),
+        thumbnailUrl: calculatedThumbnail,
         category,
-        duration: duration.trim() || 'ভিডিও',
         dateAdded: 'আজ',
         likes: 1,
         isCustom: true,
@@ -171,88 +124,85 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
           title: title.trim(),
           type: 'video',
           source: 'online',
-          url: formatYouTubeWatchUrl(yId),
+          url: urlInput.trim(),
+          thumbnailUrl: calculatedThumbnail,
           authorName: authorName.trim() || 'ক্লাব সদস্য',
-          description: description.trim() || 'সদস্যের শেয়ার করা YouTube ভিডিও',
+          description: description.trim() || 'sਦস্যর শেয়ার করা ভিডিও',
           category
         });
       } catch (e) {
         console.warn('Storage sync warn:', e);
       }
+
+      sendAppNotification(
+        'সদস্যের নতুন ভিডিও শেয়ার! 👥',
+        `সদস্য কর্নারে "${authorName.trim()}" একটি ভিডিও পোস্ট করেছেন।`,
+        'media',
+        'videos'
+      ).catch(console.warn);
+
       setSuccess('আপনার ভিডিওটি সফলভাবে সদস্য কর্নারে ও স্থায়ী ডাটা স্টোরেজে যুক্ত হয়েছে!');
-    } else {
-      // Local gallery video
-      if (!videoFile && !videoFilePreview) {
-        setError('অনুগ্রহ করে ফোন বা ডিভাইস গ্যালারি থেকে একটি ভিডিও ফাইল বেছে নিন।');
-        return;
-      }
-      if (!title.trim()) {
-        setError('অনুগ্রহ করে ভিডিওটির একটি শিরোনাম দিন।');
-        return;
-      }
-
-      const videoId = `member-video-local-${Date.now()}`;
-
-      let finalVideoUrl = '';
-      if (videoFile) {
-        setIsProcessingFile(true);
-        const uploadedUrl = await uploadMediaFile(videoFile, 'memberVideos');
-        finalVideoUrl = (uploadedUrl && !uploadedUrl.startsWith('blob:')) ? uploadedUrl : '';
-
-        try {
-          await saveVideoBlob(videoId, videoFile);
-        } catch (storageErr) {
-          console.warn('Could not store in IndexedDB:', storageErr);
+    } else if (sourceType === 'stream') {
+        if (!streamUrl.trim()) {
+          setError('অনুগ্রহ করে ভিডিও স্ট্রিমিং URL (HLS M3U8) দিন।');
+          return;
         }
-      }
 
-      const newVideo: MemberVideoItem = {
-        id: videoId,
-        title: title.trim(),
-        description: description.trim() || 'ক্লাব সদস্যের গ্যালারি থেকে শেয়ার করা বিশেষ ভিডিও।',
-        authorName: authorName.trim(),
-        authorRole: authorRole.trim() || 'ক্লাব সদস্য',
-        youtubeId: 'local-member-video',
-        youtubeUrl: '',
-        videoType: 'local',
-        videoFileUrl: finalVideoUrl,
-        thumbnailUrl: thumbnailPreview,
-        category,
-        duration: duration.trim() || 'গ্যালারি ভিডিও',
-        dateAdded: 'আজ',
-        likes: 1,
-        isCustom: true,
-        uploaderDeviceId: getDeviceId(),
-        createdAt: Date.now()
-      };
-
-      onAddVideo(newVideo);
-      try {
-        await saveClubStoredItem({
+        const videoId = `member-video-stream-${Date.now()}`;
+        const calculatedThumbnail = 'https://framerusercontent.com/images/yHxdiWReVZDcqvytpuT8C65KlaU.jpg?width=1314&height=666';
+        
+        const newVideo: MemberVideoItem = {
+          id: videoId,
           title: title.trim(),
-          type: 'video',
-          source: 'device',
-          url: finalVideoUrl,
-          thumbnailUrl: thumbnailPreview,
-          authorName: authorName.trim() || 'ক্লাব সদস্য',
-          description: description.trim() || 'মোবাইল গ্যালারি ভিডিও',
-          category
-        });
-      } catch (e) {
-        console.warn('Storage sync warn:', e);
-      }
-      setSuccess('আপনার গ্যালারি ভিডিওটি সফলভাবে সদস্য কর্নারে ও স্থায়ী ডাটা স্টোরেজে যুক্ত হয়েছে!');
+          description: description.trim() || 'ক্লাব সদস্যের শেয়ার করা বিশেষ স্ট্রিমিং ভিডিও।',
+          authorName: authorName.trim(),
+          authorRole: authorRole.trim() || 'ক্লাব সদস্য',
+          youtubeId: 'stream-member-video',
+          youtubeUrl: '',
+          videoType: 'stream',
+          videoFileUrl: streamUrl.trim(),
+          thumbnailUrl: calculatedThumbnail,
+          category,
+          dateAdded: 'আজ',
+          likes: 1,
+          isCustom: true,
+          uploaderDeviceId: getDeviceId(),
+          createdAt: Date.now()
+        };
+
+        onAddVideo(newVideo);
+        
+        try {
+          await saveClubStoredItem({
+            title: title.trim(),
+            type: 'video',
+            source: 'stream',
+            url: streamUrl.trim(),
+            thumbnailUrl: calculatedThumbnail,
+            authorName: authorName.trim() || 'ক্লাব সদস্য',
+            description: description.trim() || 'স্ট্রিমিং ভিডিও',
+            category
+          });
+        } catch (e) {
+          console.warn('Persistent storage sync warn:', e);
+        }
+
+        sendAppNotification(
+          'সদস্যের নতুন স্ট্রিমিং ভিডিও! 👥⚡',
+          `সদস্য কর্নারে "${authorName.trim()}" একটি নতুন স্ট্রিমিং ভিডিও শেয়ার করেছেন।`,
+          'media',
+          'videos'
+        ).catch(console.warn);
+
+        setSuccess('আপনার স্ট্রিমিং ভিডিওটি সফলভাবে যুক্ত হয়েছে!');
     }
 
     setTimeout(() => {
       setSuccess('');
       onClose();
-      // Reset form
       setAuthorName('');
       setUrlInput('');
-      setVideoFile(null);
-      setVideoFilePreview('');
-      setThumbnailPreview('');
+      setStreamUrl('');
       setTitle('');
       setDescription('');
     }, 1200);
@@ -270,9 +220,8 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
         exit={{ opacity: 0, scale: 0.95, y: 15 }}
         transition={{ duration: 0.2 }}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl rounded-3xl bg-gradient-to-b from-stone-900 via-zinc-900 to-black border border-emerald-500/40 shadow-[0_0_50px_rgba(16,185,129,0.25)] overflow-hidden my-8"
+        className="w-full max-w-xl rounded-3xl bg-gradient-to-b from-stone-900 via-zinc-900 to-black border border-emerald-500/40 shadow-[0_0_50px_rgba(16,185,129,0.25)] overflow-hidden my-12 sm:my-8"
       >
-        {/* Header Bar */}
         <div className="relative px-6 py-4 bg-gradient-to-r from-emerald-950/80 via-stone-900 to-stone-950 border-b border-emerald-500/30 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-400 flex items-center justify-center">
@@ -284,7 +233,7 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
                 <span>সদস্যদের কর্নার</span>
               </div>
               <h3 className="text-base sm:text-lg font-bold font-serif-bengali text-white">
-                নিজের তোলা বা পছন্দের ভিডিও যোগ করুন
+                আপনার পছন্দের ভিডিও যোগ করুন
               </h3>
             </div>
           </div>
@@ -296,7 +245,6 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Body */}
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
           {error && (
             <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-xs flex items-center gap-2">
@@ -312,12 +260,11 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
             </div>
           )}
 
-          {/* Member Name & Role */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-emerald-200 flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-emerald-400" />
-                <span>আপনার নাম (সদস্যের নাম) *</span>
+                <span>আপনার নাম *</span>
               </label>
               <input
                 type="text"
@@ -327,7 +274,6 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
                 className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-emerald-500/30 text-white placeholder-stone-500 text-xs sm:text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
               />
             </div>
-
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-emerald-200 flex items-center gap-1.5">
                 <TagIcon className="w-3.5 h-3.5 text-emerald-400" />
@@ -347,7 +293,6 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
             </div>
           </div>
 
-          {/* Source Type Selector Tabs */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-emerald-200 block">
               ভিডিওর উৎস নির্বাচন করুন:
@@ -355,153 +300,65 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
             <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-black/60 border border-emerald-500/30">
               <button
                 type="button"
-                onClick={() => setSourceType('gallery')}
-                className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                  sourceType === 'gallery'
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-white shadow-md'
-                    : 'text-stone-300 hover:text-white hover:bg-white/5'
-                }`}
-              >
-                <FileVideo className="w-4 h-4" />
-                <span>ফোন / গ্যালারি ভিডিও</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSourceType('youtube')}
-                className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all ${
-                  sourceType === 'youtube'
+                onClick={() => setSourceType('link')}
+                className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1 transition-all ${
+                  sourceType === 'link'
                     ? 'bg-red-600 text-white shadow-md'
                     : 'text-stone-300 hover:text-white hover:bg-white/5'
                 }`}
               >
                 <Youtube className="w-4 h-4" />
-                <span>YouTube ভিডিও লিংক</span>
+                <span className="truncate">লিঙ্ক</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSourceType('stream')}
+                className={`py-2 px-3 rounded-xl text-xs sm:text-sm font-bold flex items-center justify-center gap-1 transition-all ${
+                  sourceType === 'stream'
+                    ? 'bg-purple-600 text-white shadow-md'
+                    : 'text-stone-300 hover:text-white hover:bg-white/5'
+                }`}
+              >
+                <Radio className="w-4 h-4" />
+                <span className="truncate">Stream</span>
               </button>
             </div>
           </div>
 
-          {/* Gallery Video Option */}
-          {sourceType === 'gallery' ? (
-            <div key="member-video-gallery-container" className="space-y-2">
-              <label className="text-xs font-semibold text-emerald-200 flex items-center gap-1.5">
-                <Upload className="w-4 h-4 text-emerald-400" />
-                <span>ডিভাইস গ্যালারি থেকে ভিডিও ফাইল বাছাই করুন *</span>
-              </label>
-
-              <input
-                key="member-video-file-input"
-                id="member-video-file-input"
-                type="file"
-                ref={fileInputRef}
-                accept="video/mp4,video/webm,video/ogg,video/quicktime,video/*"
-                onChange={handleVideoFileChange}
-                className="hidden"
-              />
-
-              {videoFilePreview ? (
-                <div className="space-y-2 p-3 rounded-2xl bg-black/60 border border-emerald-500/30">
-                  <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-black border border-emerald-500/20">
-                    <video
-                      src={videoFilePreview}
-                      controls
-                      playsInline
-                      className="w-full h-full object-contain"
-                    />
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 pt-1 text-xs">
-                    <div className="min-w-0">
-                      <span className="font-semibold text-white block truncate">
-                        {videoFile?.name || 'নির্বাচিত ভিডিও'}
-                      </span>
-                      <span className="text-[11px] text-stone-400">
-                        সাইজ: {videoFile ? (videoFile.size / (1024 * 1024)).toFixed(1) + ' MB' : ''} • প্রস্তুত
-                      </span>
-                    </div>
-
-                    <button
-                      type="button"
-                      onClick={handleRemoveSelectedVideo}
-                      className="px-2.5 py-1.5 rounded-lg bg-red-600/80 hover:bg-red-600 text-white text-xs font-semibold flex items-center gap-1 transition-colors shrink-0"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                      <span>ভিডিও বদলান</span>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="cursor-pointer border-2 border-dashed border-emerald-500/30 hover:border-emerald-400/60 rounded-2xl p-6 text-center bg-black/40 hover:bg-black/60 transition-all flex flex-col items-center justify-center gap-2.5"
-                >
-                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 flex items-center justify-center text-emerald-300 shadow-inner">
-                    <Film className="w-7 h-7" />
-                  </div>
-                  <div className="space-y-1">
-                    <p className="text-xs sm:text-sm font-bold text-stone-200">
-                      ফোন বা কম্পিউটার থেকে ভিডিও আপলোড করুন
-                    </p>
-                    <p className="text-[11px] text-stone-400">
-                      পূজার মুহূর্ত, ঢাকের নাচ, আরতি ও আড্ডার ভিডিও
-                    </p>
-                  </div>
-                  <span className="px-4 py-1.5 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-semibold border border-emerald-500/30">
-                    গ্যালারি থেকে বেছে নিন
-                  </span>
-                </div>
-              )}
-
-              {isProcessingFile && (
-                <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs flex items-center gap-2 animate-pulse">
-                  <Clock className="w-4 h-4 animate-spin" />
-                  <span>ভিডিও থাম্বনেইল প্রসেসিং হচ্ছে...</span>
-                </div>
-              )}
-            </div>
-          ) : (
-            /* YouTube Video Option */
-            <div key="member-video-youtube-container" className="space-y-1.5">
+          {sourceType === 'link' ? (
+            <div key="member-video-link-container" className="space-y-1.5">
               <label className="text-xs font-semibold text-emerald-200 flex items-center gap-1.5">
                 <Youtube className="w-4 h-4 text-red-500" />
-                <span>YouTube ভিডিও বা শর্টস লিংক *</span>
+                <span>ভিডিওর লিঙ্ক *</span>
               </label>
               <input
-                key="member-video-youtube-input"
-                id="member-video-youtube-input"
                 type="text"
                 value={urlInput || ""}
                 onChange={(e) => setUrlInput(e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=... অথবা https://youtu.be/..."
+                placeholder="https://..."
                 className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-emerald-500/30 text-white placeholder-stone-500 text-xs sm:text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
               />
-
-              {detectedYouTubeId && (
-                <div className="p-3 rounded-2xl bg-black/50 border border-emerald-500/30 flex items-center gap-3 mt-2">
-                  <div className="relative w-28 aspect-video rounded-lg overflow-hidden bg-black shrink-0 border border-emerald-500/20">
-                    <img
-                      src={getYouTubeThumbnail(detectedYouTubeId)}
-                      alt="ভিডিও প্রিভিউ"
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
-                      <Play className="w-4 h-4 fill-white text-white" />
-                    </div>
-                  </div>
-                  <div className="flex-1 min-w-0 text-xs">
-                    <span className="text-emerald-400 font-bold flex items-center gap-1">
-                      <CheckCircle2 className="w-3.5 h-3.5" /> ইউটিউব ভিডিও প্রস্তুত
-                    </span>
-                    <span className="text-stone-400 block truncate mt-0.5 text-[11px]">
-                      ভিডিও আইডি: {detectedYouTubeId}
-                    </span>
-                  </div>
-                </div>
-              )}
+            </div>
+          ) : (
+            <div key="member-video-stream-container" className="space-y-2 p-4 rounded-2xl bg-purple-900/20 border border-purple-500/30">
+              <label className="text-xs font-semibold text-purple-200 block mb-2">
+                Stream URL (HLS M3U8):
+              </label>
+              <input
+                type="text"
+                value={streamUrl || ""}
+                onChange={(e) => setStreamUrl(e.target.value)}
+                placeholder="https://customer-xyz.cloudflarestream.com/.../manifest.m3u8"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-purple-500/30 text-white placeholder-stone-500 text-xs sm:text-sm focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400"
+              />
+              <div className="flex flex-col gap-2 mt-2">
+                <a href="https://dash.cloudflare.com/" target="_blank" rel="noopener noreferrer" className="text-[11px] text-purple-300 hover:text-white underline">Cloudflare Stream</a>
+                <a href="https://bunny.net/" target="_blank" rel="noopener noreferrer" className="text-[11px] text-purple-300 hover:text-white underline">Bunny Stream</a>
+              </div>
             </div>
           )}
 
-          {/* Video Title */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-emerald-200 flex items-center gap-1.5">
               <FileText className="w-4 h-4 text-emerald-400" />
@@ -511,66 +368,30 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
               type="text"
               value={title || ""}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="যেমন: মহাষ্টমীর অঞ্জলি ও ঢাকের তালে ধুনুচি নৃত্য"
+              placeholder="শিরোনাম লিখুন"
               className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-emerald-500/30 text-white placeholder-stone-500 text-xs sm:text-sm focus:outline-none focus:border-emerald-400 focus:ring-1 focus:ring-emerald-400"
             />
           </div>
 
-          {/* Category */}
           <div className="space-y-1.5">
             <label className="text-xs font-semibold text-emerald-200 flex items-center gap-1.5">
               <TagIcon className="w-3.5 h-3.5 text-emerald-400" />
               <span>ক্যাটাগরি</span>
             </label>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+            <select
+              value={category || ""}
+              onChange={(e) => setCategory(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-xl bg-black/60 border border-emerald-500/30 text-white text-xs sm:text-sm focus:outline-none focus:border-emerald-400"
+            >
               {MEMBER_CATEGORIES.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setCategory(cat.id)}
-                  className={`p-2 rounded-xl text-xs font-medium transition-all text-left truncate ${
-                    category === cat.id
-                      ? 'bg-emerald-500 text-black font-bold shadow'
-                      : 'bg-black/50 text-stone-300 hover:bg-white/5 border border-white/10'
-                  }`}
-                >
-                  {cat.label}
-                </button>
+                <option key={cat.id} value={cat.id}>{cat.label}</option>
               ))}
-            </div>
+            </select>
           </div>
 
-          {/* Description */}
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-emerald-200 flex items-center gap-1.5">
-              <FileText className="w-3.5 h-3.5 text-emerald-400" />
-              <span>সংক্ষিপ্ত বিবরণ (ঐচ্ছিক)</span>
-            </label>
-            <textarea
-              rows={2}
-              value={description || ""}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="ভিডিও সম্পর্কে দু-এক কথা লিখুন..."
-              className="w-full px-3.5 py-2 rounded-xl bg-black/60 border border-emerald-500/30 text-white placeholder-stone-500 text-xs sm:text-sm focus:outline-none focus:border-emerald-400 resize-none"
-            />
-          </div>
-
-          {/* Actions */}
           <div className="pt-3 border-t border-white/10 flex items-center justify-end gap-2.5">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 text-stone-300 text-xs font-semibold transition-colors"
-            >
-              বাতিল
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-500 hover:to-teal-600 text-white font-bold text-xs sm:text-sm shadow-[0_0_20px_rgba(16,185,129,0.3)] transition-all flex items-center gap-1.5"
-            >
-              <Plus className="w-4 h-4" />
-              <span>ভিডিও পোস্ট করুন</span>
-            </button>
+            <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl bg-white/5 text-stone-300 text-xs font-semibold">বাতিল</button>
+            <button type="submit" className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 text-white font-bold text-xs">ভিডিও পোস্ট করুন</button>
           </div>
         </form>
       </motion.div>

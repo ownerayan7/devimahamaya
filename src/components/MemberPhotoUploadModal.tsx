@@ -21,6 +21,7 @@ import { optimizeImage } from '../utils/imageOptimizer';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 import { uploadMediaFile } from '../utils/uploadHelper';
 import { getDeviceId } from '../utils/deviceHelper';
+import { sendAppNotification } from '../utils/notificationHelper';
 
 interface MemberPhotoUploadModalProps {
   isOpen: boolean;
@@ -170,6 +171,14 @@ export const MemberPhotoUploadModal: React.FC<MemberPhotoUploadModalProps> = ({
     } catch (e) {
       console.warn('Permanent storage sync warning:', e);
     }
+
+    sendAppNotification(
+      'সদস্যের নতুন ছবি শেয়ার! 👥📸',
+      `সদস্য কর্নারে "${authorName.trim() || 'ক্লাব সদস্য'}" একটি ছবি পোস্ট করেছেন।`,
+      'media',
+      'gallery'
+    ).catch(console.warn);
+
     setSuccessMsg('আপনার তোলা ছবিটি সফলভাবে সদস্য গ্যালারিতে ও স্থায়ী ডাটা স্টোরেজে যুক্ত হয়েছে!');
     setTimeout(() => {
       onClose();

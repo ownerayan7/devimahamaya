@@ -15,6 +15,7 @@ import { getDriveDirectImageUrl, extractDriveFileId } from '../utils/driveHelper
 import { optimizeImage } from '../utils/imageOptimizer';
 import { uploadMediaFile } from '../utils/uploadHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
+import { sendAppNotification } from '../utils/notificationHelper';
 
 interface AddPhotoModalProps {
   isOpen: boolean;
@@ -149,6 +150,13 @@ export const AddPhotoModal: React.FC<AddPhotoModalProps> = ({
         }).catch(console.warn);
       });
 
+      sendAppNotification(
+        '새 ছবি যুক্ত হয়েছে! 📸',
+        `${title.trim() || 'নতুন ছবি'} গ্যালারি পেজে যুক্ত করা হয়েছে।`,
+        'media',
+        'gallery'
+      ).catch(console.warn);
+
       setSuccessMsg(`${newItems.length}টি নতুন ছবি সফলভাবে পেজের গ্যালারিতে ও স্থায়ী স্টোরেজে যুক্ত করা হয়েছে!`);
       setTimeout(() => {
         onClose();
@@ -209,6 +217,13 @@ export const AddPhotoModal: React.FC<AddPhotoModalProps> = ({
             category: item.category
           }).catch(console.warn);
         });
+
+        sendAppNotification(
+          'নতুন ছবি আপলোড হয়েছে! 📸',
+          `${title.trim() || 'নতুন ছবি'} গ্যালারি পেজে যুক্ত করা হয়েছে।`,
+          'media',
+          'gallery'
+        ).catch(console.warn);
 
         setSuccessMsg(`${newItems.length}টি ছবি সফলভাবে পেজে ও স্থায়ী ক্লাউড স্টোরেজে যুক্ত করা হয়েছে!`);
         setTimeout(() => {

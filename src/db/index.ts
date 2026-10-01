@@ -30,10 +30,8 @@ export const createPool = () => {
 };
 
 async function initializeTables(pool: Pool) {
-  try {
-    const client = await pool.connect();
-    try {
-      await client.query(`
+  const tables = [
+    { name: 'users', query: `
         CREATE TABLE IF NOT EXISTS users (
           id SERIAL PRIMARY KEY,
           uid TEXT NOT NULL UNIQUE,
@@ -43,8 +41,9 @@ async function initializeTables(pool: Pool) {
           role TEXT DEFAULT 'member',
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
+        );` 
+    },
+    { name: 'club_records', query: `
         CREATE TABLE IF NOT EXISTS club_records (
           id SERIAL PRIMARY KEY,
           user_id INTEGER,
@@ -53,8 +52,9 @@ async function initializeTables(pool: Pool) {
           description TEXT,
           metadata JSONB,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
+        );` 
+    },
+    { name: 'tree_plantation_records', query: `
         CREATE TABLE IF NOT EXISTS tree_plantation_records (
           id SERIAL PRIMARY KEY,
           species TEXT NOT NULL,
@@ -63,8 +63,9 @@ async function initializeTables(pool: Pool) {
           date TEXT NOT NULL,
           image_url TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
+        );` 
+    },
+    { name: 'workspace_items', query: `
         CREATE TABLE IF NOT EXISTS workspace_items (
           id SERIAL PRIMARY KEY,
           user_uid TEXT NOT NULL,
@@ -73,8 +74,9 @@ async function initializeTables(pool: Pool) {
           title TEXT NOT NULL,
           data JSONB,
           synced_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
+        );` 
+    },
+    { name: 'sync_logs', query: `
         CREATE TABLE IF NOT EXISTS sync_logs (
           id SERIAL PRIMARY KEY,
           source TEXT NOT NULL,
@@ -86,8 +88,9 @@ async function initializeTables(pool: Pool) {
           uploaded_by TEXT,
           device_info TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-
+        );` 
+    },
+    { name: 'media_cloud_files', query: `
         CREATE TABLE IF NOT EXISTS media_cloud_files (
           id SERIAL PRIMARY KEY,
           filename TEXT NOT NULL UNIQUE,
@@ -97,14 +100,17 @@ async function initializeTables(pool: Pool) {
           size_bytes INTEGER,
           uploaded_by TEXT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
-      console.log('[PostgreSQL Init] All database tables initialized successfully.');
-    } finally {
-      client.release();
+        );` 
     }
-  } catch (err) {
-    console.warn('[PostgreSQL Init] Schema initialization bypassed:', err);
+  ];
+
+  for (const table of tables) {
+    try {
+      await pool.query(table.query);
+      console.log(`[PostgreSQL Init] Table '${table.name}' checked/created successfully.`);
+    } catch (err) {
+      console.warn(`[PostgreSQL Init] Could not ensure table '${table.name}':`, err);
+    }
   }
 }
 

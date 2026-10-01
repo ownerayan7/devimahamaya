@@ -21,6 +21,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { ClubStoredItem, getStoredClubItems, saveClubStoredItem, fetchCloudClubItems, subscribeCloudClubItems, deleteClubStoredItem } from '../utils/clubStorageManager';
+import { sendAppNotification } from '../utils/notificationHelper';
 import { optimizeImage } from '../utils/imageOptimizer';
 import { uploadMediaFile } from '../utils/uploadHelper';
 
@@ -36,8 +37,10 @@ export const ClubDataStorageSection: React.FC<ClubDataStorageSectionProps> = ({ 
   const [isUploading, setIsUploading] = useState(false);
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadCategory, setUploadCategory] = useState('puja');
-  const [uploadType, setUploadType] = useState<'photo' | 'video' | 'audio' | 'document'>('photo');
+  const [uploadType, setUploadType] = useState<'photo' | 'video' | 'audio' | 'document'>('video');
+  const [sourceType, setSourceType] = useState<'link' | 'stream'>('stream');
   const [uploadUrl, setUploadUrl] = useState('');
+  const [streamUrl, setStreamUrl] = useState(''); // Added streamUrl state
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
 
@@ -151,23 +154,53 @@ export const ClubDataStorageSection: React.FC<ClubDataStorageSectionProps> = ({ 
 
   const handleUrlSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadUrl.trim() || !uploadTitle.trim()) return;
+    if (!uploadTitle.trim()) return;
 
-    setIsUploading(true);
-    await saveClubStoredItem({
-      title: uploadTitle.trim(),
-      type: uploadType,
-      source: 'online',
-      url: uploadUrl.trim(),
-      authorName: 'অনলাইন আপলোড',
-      description: 'অনলাইন লিঙ্ক বা ড্রাইভ থেকে সংরক্ষিত ফাইল।',
-      category: uploadCategory
-    });
+    if (sourceType === 'stream') {
+        if (!streamUrl.trim()) return;
+        setIsUploading(true);
+        await saveClubStoredItem({
+            title: uploadTitle.trim(),
+            type: 'video', // Stream URL will always be video
+            source: 'stream',
+            url: streamUrl.trim(),
+            authorName: 'অ্যাডমিন (স্ট্রিমিং)',
+            description: 'ক্লাউডফ্লেয়ার বা বানি স্ট্রিম থেকে সংরক্ষিত।',
+            category: uploadCategory
+        });
+        setStreamUrl('');
+
+        sendAppNotification(
+          'নতুন ফাইল ড্রাইভে সেভ হয়েছে! 📦⚡',
+          `অ্যাডমিন স্টোরেজে নতুন স্ট্রিমিং ফাইল "${uploadTitle.trim()}" যুক্ত করা হয়েছে।`,
+          'media',
+          'media'
+        ).catch(console.warn);
+    } else {
+        if (!uploadUrl.trim()) return;
+        setIsUploading(true);
+        await saveClubStoredItem({
+            title: uploadTitle.trim(),
+            type: uploadType,
+            source: 'online',
+            url: uploadUrl.trim(),
+            authorName: 'অনলাইন আপলোড',
+            description: 'অনলাইন লিঙ্ক বা ড্রাইভ থেকে সংরক্ষিত ফাইল।',
+            category: uploadCategory
+        });
+        setUploadUrl('');
+
+        sendAppNotification(
+          'নতুন ফাইল ড্রাইভে সেভ হয়েছে! 📦',
+          `অ্যাডমিন স্টোরেজে নতুন অনলাইন ফাইল "${uploadTitle.trim()}" যুক্ত করা হয়েছে।`,
+          'media',
+          'media'
+        ).catch(console.warn);
+    }
 
     setUploadTitle('');
-    setUploadUrl('');
     setShowUploadModal(false);
-    setSuccessMsg('অনলাইন ফাইলটি ক্লাবের স্থায়ী ডাটা স্টোরেজে সংরক্ষিত হয়েছে!');
+    setSuccessMsg('ফাইলটি ক্লাবের স্থায়ী ডাটা স্টোরেজে সংরক্ষিত হয়েছে!');
     loadItems();
     setIsUploading(false);
     setTimeout(() => setSuccessMsg(''), 4000);
@@ -361,8 +394,8 @@ export const ClubDataStorageSection: React.FC<ClubDataStorageSectionProps> = ({ 
 
       {/* Upload Modal Popup */}
       {showUploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
-          <div className="w-full max-w-md rounded-3xl bg-slate-900 border-2 border-amber-500/50 p-6 space-y-4 shadow-[0_0_50px_rgba(245,158,11,0.3)] text-slate-100">
+        <div className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
+          <div className="w-full max-w-md rounded-3xl bg-slate-900 border-2 border-amber-500/50 p-5 sm:p-6 space-y-4 shadow-[0_0_50px_rgba(245,158,11,0.3)] text-slate-100 my-12 sm:my-8">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <h3 className="text-base font-bold text-amber-300 font-serif-bengali">
                 📁 স্থায়ী ডাটা স্টোরেজে ফাইল আপলোড
@@ -401,33 +434,73 @@ export const ClubDataStorageSection: React.FC<ClubDataStorageSectionProps> = ({ 
                 </select>
               </div>
 
-              {/* Device Upload */}
-              <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-500/30 text-center space-y-2">
-                <span className="text-amber-300 font-bold block">মোবাইল গ্যালারি বা ডিভাইস থেকে আপলোড:</span>
-                <input
-                  type="file"
-                  onChange={handleFileUpload}
-                  className="w-full text-xs text-slate-300 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-500 file:text-black hover:file:bg-amber-400 cursor-pointer"
-                />
-                <p className="text-[10px] text-stone-400">আপলোড করার সাথে সাথেই এটি স্থায়ীভাবে স্টোরেজে সেভ হয়ে যাবে।</p>
+              {/* Source Type Selector Tabs */}
+              <div className="space-y-1.5">
+                <label className="block text-slate-300 font-semibold mb-1">
+                  উৎস নির্বাচন করুন:
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-black/60 border border-amber-500/30">
+                  <button
+                    type="button"
+                    onClick={() => setSourceType('link')}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      sourceType === 'link'
+                        ? 'bg-amber-600 text-white shadow'
+                        : 'text-stone-300 hover:text-white'
+                    }`}
+                  >
+                    <span>লিঙ্ক</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setSourceType('stream')}
+                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                      sourceType === 'stream'
+                        ? 'bg-purple-700 text-white shadow'
+                        : 'text-stone-300 hover:text-white'
+                    }`}
+                  >
+                    <span>Stream</span>
+                  </button>
+                </div>
               </div>
 
-              <div className="text-center text-stone-500 font-semibold">অথवा অনলাইন লিঙ্ক দিন</div>
+              <form onSubmit={handleUrlSubmit} className="space-y-3 pt-1">
+                {sourceType === 'link' ? (
+                  <div className="space-y-1.5">
+                    <label className="block text-slate-300 font-semibold mb-1">অনলাইন বা ড্রাইভ লিঙ্ক *</label>
+                    <input
+                      type="url"
+                      placeholder="https://..."
+                      value={uploadUrl}
+                      onChange={(e) => setUploadUrl(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-xs outline-none focus:border-amber-500"
+                    />
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-purple-950/20 border border-purple-500/30 text-center space-y-2">
+                    <span className="text-purple-300 font-bold block text-left">Stream URL (HLS M3U8): *</span>
+                    <input
+                      type="text"
+                      value={streamUrl}
+                      onChange={(e) => setStreamUrl(e.target.value)}
+                      placeholder="https://.../manifest.m3u8"
+                      className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-xs outline-none focus:border-purple-500 font-mono"
+                    />
+                    <div className="flex flex-col gap-1.5 mt-2 text-left">
+                      <a href="https://dash.cloudflare.com/" target="_blank" rel="noopener noreferrer" className="text-[10px] text-purple-300 hover:text-white underline">Cloudflare Stream ড্যাশবোর্ড</a>
+                      <a href="https://bunny.net/" target="_blank" rel="noopener noreferrer" className="text-[10px] text-purple-300 hover:text-white underline">Bunny Stream ড্যাশবোর্ড</a>
+                    </div>
+                  </div>
+                )}
 
-              <form onSubmit={handleUrlSubmit} className="space-y-2">
-                <input
-                  type="url"
-                  placeholder="অনলাইন ফাইল বা ড্রাইভ লিঙ্ক (https://...)"
-                  value={uploadUrl}
-                  onChange={(e) => setUploadUrl(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-700 rounded-xl p-2.5 text-white text-xs outline-none focus:border-amber-500"
-                />
                 <button
                   type="submit"
-                  disabled={!uploadTitle.trim() || !uploadUrl.trim() || isUploading}
+                  disabled={!uploadTitle.trim() || (sourceType === 'stream' ? !streamUrl.trim() : !uploadUrl.trim()) || isUploading}
                   className="w-full py-2.5 rounded-xl bg-amber-500 text-black font-bold text-xs hover:bg-amber-400 disabled:opacity-50"
                 >
-                  {isUploading ? 'সংরক্ষণ হচ্ছে...' : 'অনلاین লিঙ্ক স্টোরেজে সেভ করুন'}
+                  {isUploading ? 'সংরক্ষণ হচ্ছে...' : 'সেভ করুন'}
                 </button>
               </form>
             </div>

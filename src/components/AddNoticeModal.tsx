@@ -18,6 +18,7 @@ import {
 import { Announcement } from '../types';
 import { uploadMediaFile } from '../utils/uploadHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
+import { sendAppNotification } from '../utils/notificationHelper';
 
 interface AddNoticeModalProps {
   isOpen: boolean;
@@ -123,6 +124,13 @@ export const AddNoticeModal: React.FC<AddNoticeModalProps> = ({
       description: newNotice.content,
       category: 'notice'
     }).catch(console.warn);
+
+    sendAppNotification(
+      `জরুরি বিজ্ঞপ্তি: ${newNotice.title}`,
+      `11 স্টার ক্লাবের পক্ষ থেকে একটি নতুন বিজ্ঞপ্তি প্রকাশ করা হয়েছে।`,
+      'notice',
+      'notice'
+    ).catch(console.warn);
 
     setSuccess('নতুন বিজ্ঞপ্তিটি সফলভাবে প্রকাশিত হয়েছে!');
 

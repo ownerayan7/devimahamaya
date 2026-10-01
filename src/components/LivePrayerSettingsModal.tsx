@@ -1,10 +1,9 @@
-import React, { useState, useRef } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'motion/react';
 import {
   X,
   Radio,
-  Upload,
-  Link,
+  Link as LinkIcon,
   Video,
   CheckCircle2,
   AlertCircle,
@@ -13,8 +12,6 @@ import {
   Trash2
 } from 'lucide-react';
 import { parseUniversalMedia } from '../utils/mediaEmbedHelper';
-import { saveVideoBlob, deleteVideoBlob } from '../utils/videoStorageHelper';
-import { uploadMediaFile } from '../utils/uploadHelper';
 
 interface LivePrayerSettingsModalProps {
   isOpen: boolean;
@@ -46,37 +43,14 @@ export const LivePrayerSettingsModal: React.FC<LivePrayerSettingsModalProps> = (
   const [isLiveActive, setIsLiveActive] = useState(currentConfig.isLiveActive);
   const [liveUrl, setLiveUrl] = useState(currentConfig.liveUrl);
   const [fallbackTitle, setFallbackTitle] = useState(currentConfig.fallbackTitle);
-  const [fallbackSourceType, setFallbackSourceType] = useState<'link' | 'file'>('link');
+  const [fallbackSourceType, setFallbackSourceType] = useState<'link' | 'stream'>('stream');
   const [fallbackUrlInput, setFallbackUrlInput] = useState(currentConfig.fallbackUrl);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<string>('');
+  const [streamUrl, setStreamUrl] = useState(currentConfig.fallbackUrl);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
   if (!isOpen) return null;
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.type.startsWith('video/')) {
-      setError('অনুগ্রহ করে সঠিক ভিডিও ফাইল (MP4, WebM, MOV) নির্বাচন করুন।');
-      return;
-    }
-
-    setError('');
-    setSelectedFile(file);
-    const objUrl = URL.createObjectURL(file);
-    setFilePreview(objUrl);
-
-    if (!fallbackTitle.trim()) {
-      const clean = file.name.replace(/\.[^/.]+$/, '').replace(/[-_]/g, ' ');
-      setFallbackTitle(clean);
-    }
-  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -88,29 +62,18 @@ export const LivePrayerSettingsModal: React.FC<LivePrayerSettingsModalProps> = (
     }
 
     setIsSubmitting(true);
-    let finalFallbackUrl = currentConfig.fallbackUrl;
-    let blobId = currentConfig.blobId || '';
-    let isLocalBlob = false;
+    let finalFallbackUrl = '';
 
-    if (fallbackSourceType === 'file' && selectedFile) {
-      blobId = `prayer-live-fallback-permanent`;
-      isLocalBlob = true;
-      try {
-        await saveVideoBlob(blobId, selectedFile);
-        const uploadedUrl = await uploadMediaFile(selectedFile, 'prayerFallback');
-        if (uploadedUrl) {
-          finalFallbackUrl = uploadedUrl;
-        } else {
-          finalFallbackUrl = '';
-        }
-      } catch (err) {
-        console.warn('Error saving fallback video blob:', err);
+    if (fallbackSourceType === 'stream') {
+      if (!streamUrl.trim()) {
+        setError('অনুগ্রহ করে ভিডিও স্ট্রিমিং URL (HLS M3U8) দিন।');
+        setIsSubmitting(false);
+        return;
       }
+      finalFallbackUrl = streamUrl.trim();
     } else if (fallbackSourceType === 'link' && fallbackUrlInput.trim()) {
       const parsed = parseUniversalMedia(fallbackUrlInput, 'video');
       finalFallbackUrl = parsed.embedUrl || fallbackUrlInput.trim();
-      blobId = '';
-      isLocalBlob = false;
     }
 
     const parsedLive = parseUniversalMedia(liveUrl.trim(), 'video');
@@ -121,8 +84,8 @@ export const LivePrayerSettingsModal: React.FC<LivePrayerSettingsModalProps> = (
       liveUrl: finalLiveUrl || 'https://www.youtube-nocookie.com/embed/wm1OtR2kEVc?enablejsapi=1&autoplay=1',
       fallbackTitle: fallbackTitle.trim() || 'আজকের রেকর্ডড প্রার্থনা ও গ্যালারি ভিডিও',
       fallbackUrl: finalFallbackUrl,
-      blobId,
-      isLocalBlob
+      blobId: '',
+      isLocalBlob: false
     });
 
     setSuccess('লাইভ ও প্রার্থনা ব্যাকআপ সেটিংস সফলভাবে আপডেট করা হয়েছে!');
@@ -134,11 +97,11 @@ export const LivePrayerSettingsModal: React.FC<LivePrayerSettingsModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-start justify-center p-3 sm:p-4 bg-black/85 backdrop-blur-md overflow-y-auto">
       <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 15 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="w-full max-w-xl rounded-3xl bg-[#140e11] border border-amber-500/40 p-6 sm:p-8 shadow-[0_0_50px_rgba(245,158,11,0.25)] space-y-6 relative my-8"
+        className="w-full max-w-xl rounded-3xl bg-[#140e11] border border-amber-500/40 p-5 sm:p-8 shadow-[0_0_50px_rgba(245,158,11,0.25)] space-y-6 relative my-12 sm:my-8"
       >
         <button
           onClick={onClose}
@@ -156,7 +119,7 @@ export const LivePrayerSettingsModal: React.FC<LivePrayerSettingsModalProps> = (
               লাইভ প্রার্থনা ও গ্যালারি ব্যাকআপ সেটিংস
             </h3>
             <p className="text-xs text-amber-100/75">
-              প্রার্থনার লাইভ সম্প্রচার চালু করুন অথবা লাইভ না থাকলে গ্যালারি/ডিভাইস থেকে ভিডিও যুক্ত করুন।
+              প্রার্থনার লাইভ সম্প্রচার চালু করুন অথবা লাইভ না থাকলে লিঙ্ক বা স্ট্রিম থেকে রেকর্ডড ভিডিও যুক্ত করুন।
             </p>
           </div>
         </div>
@@ -225,7 +188,7 @@ export const LivePrayerSettingsModal: React.FC<LivePrayerSettingsModalProps> = (
             <div className="flex items-center justify-between">
               <span className="text-xs font-bold text-amber-200 font-serif-bengali flex items-center gap-1.5">
                 <Sparkles className="w-4 h-4 text-amber-400" />
-                লাইভ না থাকলে গ্যালারি বা ডিভাইস থেকে রেকর্ডড প্রার্থনা আপলোড / লিঙ্ক:
+                লাইভ না থাকলে রেকর্ডড প্রার্থনা আপলোড / লিঙ্ক:
               </span>
               <div className="flex rounded-lg bg-black/40 p-1 border border-amber-500/30 text-xs">
                 <button
@@ -239,12 +202,12 @@ export const LivePrayerSettingsModal: React.FC<LivePrayerSettingsModalProps> = (
                 </button>
                 <button
                   type="button"
-                  onClick={() => setFallbackSourceType('file')}
+                  onClick={() => setFallbackSourceType('stream')}
                   className={`px-3 py-1 rounded-md font-semibold transition-colors ${
-                    fallbackSourceType === 'file' ? 'bg-amber-500 text-black font-bold' : 'text-stone-300'
+                    fallbackSourceType === 'stream' ? 'bg-purple-700 text-white shadow' : 'text-stone-300'
                   }`}
                 >
-                  গ্যালারি ফাইল
+                  Stream
                 </button>
               </div>
             </div>
@@ -265,68 +228,35 @@ export const LivePrayerSettingsModal: React.FC<LivePrayerSettingsModalProps> = (
             {fallbackSourceType === 'link' ? (
               <div className="space-y-1.5">
                 <label className="text-[11px] text-stone-300 block font-medium">
-                  ভিডিও লিঙ্ক (YouTube / Drive / Web):
+                  ভিডিও লিঙ্ক (YouTube / Drive / Facebook / Insta):
                 </label>
                 <input
                   type="text"
                   value={fallbackUrlInput}
                   onChange={(e) => setFallbackUrlInput(e.target.value)}
-                  placeholder="https://youtu.be/..."
-                  className="w-full px-4 py-2.5 rounded-xl bg-black/60 border border-amber-500/30 text-white text-xs font-mono focus:outline-none focus:border-amber-400"
+                  placeholder="https://..."
+                  className="w-full px-4 py-2.5 rounded-xl bg-black/60 border border-amber-500/30 text-white text-xs focus:outline-none focus:border-amber-400"
                 />
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="space-y-2 p-4 rounded-2xl bg-purple-900/20 border border-purple-500/30">
+                <label className="text-xs font-semibold text-purple-200 block mb-2">Stream URL (HLS M3U8):</label>
                 <input
-                  type="file"
-                  ref={fileInputRef}
-                  onChange={handleFileChange}
-                  accept="video/*"
-                  className="hidden"
+                  type="text"
+                  value={streamUrl}
+                  onChange={(e) => setStreamUrl(e.target.value)}
+                  placeholder="https://customer-xyz.cloudflarestream.com/.../manifest.m3u8"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-black/60 border border-purple-500/30 text-white text-xs"
                 />
-                <div
-                  onClick={() => fileInputRef.current?.click()}
-                  className="border-2 border-dashed border-amber-500/40 hover:border-amber-500/70 rounded-2xl p-4 text-center cursor-pointer transition-colors bg-amber-500/5"
-                >
-                  <Upload className="w-6 h-6 mx-auto text-amber-400 mb-2" />
-                  <span className="text-xs font-bold text-amber-200 block">
-                    {selectedFile ? selectedFile.name : 'গ্যালারি বা ডিভাইস থেকে ভিডিও ফাইল নির্বাচন করুন (MP4, MOV)'}
-                  </span>
-                  <span className="text-[10px] text-stone-400 mt-1 block">
-                    ক্লিক করে আপনার ফোনের গ্যালারি থেকে ভিডিও আপলোড করুন
-                  </span>
+                <div className="flex flex-col gap-2 mt-2">
+                  <a href="https://dash.cloudflare.com/" target="_blank" rel="noopener noreferrer" className="text-[11px] text-purple-300 underline">Cloudflare Stream ড্যাশবোর্ড</a>
+                  <a href="https://bunny.net/" target="_blank" rel="noopener noreferrer" className="text-[11px] text-purple-300 underline">Bunny Stream ড্যাশবোর্ড</a>
                 </div>
               </div>
             )}
           </div>
 
-          <div className="pt-4 flex items-center justify-between gap-3 border-t border-amber-500/20">
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await deleteVideoBlob('prayer-live-fallback-permanent');
-                } catch (e) {
-                  console.warn('Error deleting video blob:', e);
-                }
-                setSelectedFile(null);
-                setFilePreview('');
-                setFallbackUrlInput('');
-                onSaveConfig({
-                  ...currentConfig,
-                  fallbackUrl: 'https://www.youtube-nocookie.com/embed/wm1OtR2kEVc?enablejsapi=1&rel=0',
-                  blobId: '',
-                  isLocalBlob: false
-                });
-                setSuccess('পুরাতন আপলোড ও স্টোরেজ সফলভাবে খালি/রিসেট করা হয়েছে!');
-                setTimeout(() => setSuccess(''), 2000);
-              }}
-              className="px-3.5 py-2.5 rounded-xl bg-red-600/20 hover:bg-red-600/30 border border-red-500/40 text-red-300 text-xs font-bold transition-all flex items-center gap-1.5 active:scale-95"
-            >
-              <Trash2 className="w-3.5 h-3.5 text-red-400" />
-              <span>পুরাতন ভিডিও ও স্টোরেজ খালি করুন</span>
-            </button>
-
+          <div className="pt-4 flex items-center justify-end gap-3 border-t border-amber-500/20">
             <div className="flex items-center gap-2">
               <button
                 type="button"

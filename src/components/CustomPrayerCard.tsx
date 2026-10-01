@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
+import { HlsVideoPlayer } from './HlsVideoPlayer';
 import {
   Flame,
   Music,
@@ -86,7 +87,10 @@ export const CustomPrayerCard: React.FC<CustomPrayerCardProps> = ({
       item.mediaSource === 'local' ||
       mediaSrc.startsWith('data:') ||
       mediaSrc.startsWith('blob:') ||
-      mediaSrc.includes('/uploads/'));
+      mediaSrc.includes('/uploads/') ||
+      mediaSrc.includes('cloudflare') ||
+      mediaSrc.includes('bunny') ||
+      mediaSrc.endsWith('.m3u8'));
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -178,13 +182,9 @@ export const CustomPrayerCard: React.FC<CustomPrayerCardProps> = ({
       <div className="aspect-video w-full rounded-2xl overflow-hidden border-2 border-amber-500/30 bg-black shadow-lg relative">
         {item.type === 'video' ? (
           isDirectVideo ? (
-            <video
-              ref={videoRef}
+            <HlsVideoPlayer
               src={getPublicMediaUrl(mediaSrc)}
-              controls
-              playsInline
-              preload="metadata"
-              className="w-full h-full object-contain bg-black"
+              poster={item.thumbnailUrl}
             />
           ) : (
             <iframe
