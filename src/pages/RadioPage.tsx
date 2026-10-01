@@ -648,45 +648,49 @@ export const RadioPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Quick Search Shortcut Chips */}
-        <div className="flex flex-wrap items-center gap-2 pt-1 text-xs">
-          <span className="text-stone-400 font-medium">দ্রুত ফিল্টার:</span>
-          <button
-            onClick={() => {
-              setSelectedCategory('kolkata');
-              setSearchQuery('');
-            }}
-            className="px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/40 text-amber-200 font-medium transition-all"
-          >
-            📍 কলকাতা ও পশ্চিমবঙ্গ ({getCategoryCount('kolkata')})
-          </button>
-          <button
-            onClick={() => {
-              setSelectedCategory('akashvani');
-              setSearchQuery('');
-            }}
-            className="px-2.5 py-1 rounded-lg bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/40 text-emerald-200 font-medium transition-all"
-          >
-            📻 আকাশবাণী ‘ক’ ও ‘খ’ ({getCategoryCount('akashvani')})
-          </button>
-          <button
-            onClick={() => {
-              setSelectedCategory('all');
-              setSearchQuery('VBS');
-            }}
-            className="px-2.5 py-1 rounded-lg bg-blue-500/15 hover:bg-blue-500/25 border border-blue-500/40 text-blue-200 font-medium transition-all"
-          >
-            🎙️ বিবিধ ভারতী (VBS)
-          </button>
-          <button
-            onClick={() => {
-              setSelectedCategory('all');
-              setSearchQuery('FM');
-            }}
-            className="px-2.5 py-1 rounded-lg bg-purple-500/15 hover:bg-purple-500/25 border border-purple-500/40 text-purple-200 font-medium transition-all"
-          >
-            🎵 এফএম রেইনবো ও গোল্ড
-          </button>
+        {/* Quick Search Shortcut Chips - Organized row-by-row and left-aligned */}
+        <div className="flex flex-col items-start gap-2 pt-1 text-xs sm:text-sm">
+          <span className="text-amber-300 font-bold uppercase tracking-wider font-serif-bengali mb-1 block">
+            দ্রুত ফিল্টার:
+          </span>
+          <div className="flex flex-col items-start gap-2 w-full max-w-sm pl-1">
+            <button
+              onClick={() => {
+                setSelectedCategory('kolkata');
+                setSearchQuery('');
+              }}
+              className="w-full text-left px-3.5 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/35 text-amber-200 font-bold transition-all flex items-center gap-2 hover:translate-x-1"
+            >
+              <span>📍 কলকাতা ও পশ্চিমবঙ্গ ({getCategoryCount('kolkata')})</span>
+            </button>
+            <button
+              onClick={() => {
+                setSelectedCategory('akashvani');
+                setSearchQuery('');
+              }}
+              className="w-full text-left px-3.5 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/35 text-emerald-200 font-bold transition-all flex items-center gap-2 hover:translate-x-1"
+            >
+              <span>📻 আকাশবাণী ‘ক’ ও ‘খ’ ({getCategoryCount('akashvani')})</span>
+            </button>
+            <button
+              onClick={() => {
+                setSelectedCategory('all');
+                setSearchQuery('VBS');
+              }}
+              className="w-full text-left px-3.5 py-2.5 rounded-xl bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/35 text-blue-200 font-bold transition-all flex items-center gap-2 hover:translate-x-1"
+            >
+              <span>🎙️ বিবিধ ভারতী (VBS)</span>
+            </button>
+            <button
+              onClick={() => {
+                setSelectedCategory('all');
+                setSearchQuery('FM');
+              }}
+              className="w-full text-left px-3.5 py-2.5 rounded-xl bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/35 text-purple-200 font-bold transition-all flex items-center gap-2 hover:translate-x-1"
+            >
+              <span>🎵 এফএম রেইনবো ও গোল্ড</span>
+            </button>
+          </div>
         </div>
 
         {/* Category Pills */}
