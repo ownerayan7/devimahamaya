@@ -33,36 +33,45 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
 
-  // Stale-While-Revalidate Strategy with SPA Navigation Fallback
-  event.respondWith(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.match(event.request).then((cachedResponse) => {
-        const fetchPromise = fetch(event.request)
-          .then((networkResponse) => {
-            if (networkResponse && networkResponse.status === 200) {
-              cache.put(event.request, networkResponse.clone());
-            }
-            return networkResponse;
-          })
-          .catch(() => {
-            if (event.request.mode === 'navigate') {
-              return caches.match('/');
-            }
-          });
+  const isNavigation = event.request.mode === 'navigate' || event.request.url.endsWith('/') || event.request.url.includes('index.html');
 
-        return cachedResponse || fetchPromise.then((res) => {
-          if (!res && event.request.mode === 'navigate') {
-            return caches.match('/');
+  if (isNavigation) {
+    // Network-First Strategy for index.html/Navigation to ensure clients always get the newest build immediately
+    event.respondWith(
+      fetch(event.request)
+        .then((networkResponse) => {
+          if (networkResponse && networkResponse.status === 200) {
+            const responseClone = networkResponse.clone();
+            caches.open(CACHE_NAME).then((cache) => {
+              cache.put(event.request, responseClone);
+            });
           }
-          return res;
-        }).catch(() => {
-          if (event.request.mode === 'navigate') {
-            return caches.match('/');
-          }
+          return networkResponse;
+        })
+        .catch(() => {
+          return caches.match('/');
+        })
+    );
+  } else {
+    // Stale-While-Revalidate Strategy for other static assets
+    event.respondWith(
+      caches.open(CACHE_NAME).then((cache) => {
+        return cache.match(event.request).then((cachedResponse) => {
+          const fetchPromise = fetch(event.request)
+            .then((networkResponse) => {
+              if (networkResponse && networkResponse.status === 200) {
+                cache.put(event.request, networkResponse.clone());
+              }
+              return networkResponse;
+              // If network response fails, fallback to cache is already handled below
+            })
+            .catch(() => {});
+
+          return cachedResponse || fetchPromise;
         });
-      });
-    })
-  );
+      })
+    );
+  }
 });
 
 // Background Push Notification handler for when app/website is closed or in background

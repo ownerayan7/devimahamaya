@@ -54,6 +54,15 @@ createRoot(document.getElementById('root')!).render(
 
 // Register PWA Service Worker for app installability, background lockscreen notifications, and offline cache
 if (typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  // Reload page when new service worker takes over to apply any newly built codebase instantly across all devices
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!refreshing) {
+      refreshing = true;
+      window.location.reload();
+    }
+  });
+
   const registerSW = () => {
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch((err) => {
       console.warn('PWA service worker registration notice:', err);
