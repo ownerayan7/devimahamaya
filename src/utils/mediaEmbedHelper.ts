@@ -58,7 +58,11 @@ export function isDirectVideoUrl(url: string): boolean {
     clean.startsWith('blob:') ||
     clean.startsWith('data:video') ||
     clean.includes('/uploads/') ||
-    /\.(mp4|webm|mov|m4v|ogv|mkv|3gp|avi)(\?.*)?$/i.test(clean)
+    clean.includes('m3u8') ||
+    clean.includes('cloudflare') ||
+    clean.includes('bunny') ||
+    clean.includes('hls') ||
+    /\.(mp4|webm|mov|m4v|ogv|mkv|3gp|avi|m3u8)(\?.*)?$/i.test(clean)
   );
 }
 

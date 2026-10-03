@@ -21,7 +21,7 @@ import { AdminStorageAccessCard } from '../components/AdminStorageAccessCard';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, deleteDoc, doc } from 'firebase/firestore';
 import { sendAppNotification } from '../utils/notificationHelper';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer, addDeletedId } from '../utils/persistentStorage';
 import { socket } from '../lib/socket';
 
 const LOCAL_STORAGE_KEY = '11star_gallery_custom_photos';
@@ -212,7 +212,8 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ onOpenAdminStorage }) 
   const handleConfirmDeleteCustomPhoto = async () => {
     if (photoToDeleteId === null) return;
     const idStr = String(photoToDeleteId);
-    const updated = customPhotos.filter((p) => p.id !== photoToDeleteId);
+    addDeletedId(idStr);
+    const updated = customPhotos.filter((p) => String(p.id) !== idStr);
     setCustomPhotos(updated);
     await savePersistentItems(LOCAL_STORAGE_KEY, updated);
     try {

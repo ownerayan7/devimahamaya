@@ -22,7 +22,7 @@ import { AdminPhotoAuthModal } from './AdminPhotoAuthModal';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { sendAppNotification } from '../utils/notificationHelper';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer, addDeletedId } from '../utils/persistentStorage';
 import { socket } from '../lib/socket';
 
 const LOCAL_STORAGE_NOTICES_KEY = '11star_custom_announcements_v2';
@@ -224,6 +224,7 @@ export const AnnouncementCard: React.FC = () => {
   const handleConfirmDeleteNotice = async () => {
     if (!noticeToDeleteId) return;
     const id = noticeToDeleteId;
+    addDeletedId(id);
     const updated = customNotices.filter((n) => n.id !== id);
     saveCustomNotices(updated);
     if (activeNoticeId === id) {

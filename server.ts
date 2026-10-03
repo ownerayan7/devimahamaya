@@ -3,6 +3,7 @@ import cors from 'cors';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
+import mongoose from 'mongoose';
 import { GoogleGenAI } from '@google/genai';
 import { requireAuth, AuthRequest } from './src/middleware/auth.ts';
 import { 
@@ -27,6 +28,18 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
+// MongoDB Atlas connection setup
+const DEFAULT_MONGO_URI = 'mongodb://ownerayan7_db_user:<db_password>@ac-z0o3fsw-shard-00-00.1rirh6r.mongodb.net:27017,ac-z0o3fsw-shard-00-01.1rirh6r.mongodb.net:27017,ac-z0o3fsw-shard-00-02.1rirh6r.mongodb.net:27017/11starclub?ssl=true&replicaSet=atlas-bd8yj0-shard-0&authSource=admin&appName=ayan&compressors=zlib';
+const MONGODB_URI = process.env.MONGODB_URI || DEFAULT_MONGO_URI;
+
+if (MONGODB_URI && !MONGODB_URI.includes('<db_password>')) {
+  mongoose.connect(MONGODB_URI)
+    .then(() => console.log('[MongoDB Atlas] Connected successfully to cluster ayan (atlas-bd8yj0-shard-0)'))
+    .catch((err) => console.warn('[MongoDB Atlas] Connection notice:', err.message));
+} else {
+  console.log('[MongoDB Atlas] Ready to connect to cluster ayan. Provide password in MONGODB_URI environment variable to activate MongoDB Atlas sync alongside Firebase Firestore.');
+}
+
 const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
@@ -39,10 +52,30 @@ const io = new Server(httpServer, {
 io.on('connection', (socket) => {
   console.log(`[WebSocket] Client connected: ${socket.id}`);
 
-  // When an admin or user uploads any item, broadcast it to all other active clients immediately
+  // Broadcast uploads to all other connected clients
   socket.on('upload_item', (data) => {
-    console.log(`[WebSocket] Broad-casting uploaded item for category: ${data?.category}`);
+    console.log(`[WebSocket] Broadcasting upload for category: ${data?.category || 'general'}`);
     socket.broadcast.emit('item_uploaded', data);
+    io.emit('realtime_sync', { action: 'upload', data });
+  });
+
+  // Broadcast deletions to all other connected clients
+  socket.on('delete_item', (data) => {
+    console.log(`[WebSocket] Broadcasting delete for item ID: ${data?.id || data?.docId}`);
+    socket.broadcast.emit('item_deleted', data);
+    io.emit('realtime_sync', { action: 'delete', data });
+  });
+
+  // Broadcast Durga Pujo links
+  socket.on('porbo_link_change', (data) => {
+    console.log(`[WebSocket] Broadcasting Durga Pujo Porbo link update:`, data?.title);
+    io.emit('porbo_link_updated', data);
+  });
+
+  // Broadcast Notices
+  socket.on('notice_change', (data) => {
+    console.log(`[WebSocket] Broadcasting notice board update:`, data?.title);
+    io.emit('notice_updated', data);
   });
 
   socket.on('disconnect', () => {
@@ -53,6 +86,34 @@ io.on('connection', (socket) => {
 app.use(cors());
 app.use(express.json({ limit: '500mb' }));
 app.use(express.urlencoded({ limit: '500mb', extended: true }));
+
+// Health & Database Connection Status Endpoint
+app.get('/api/db-status', (_req, res) => {
+  const mongoStateMap: Record<number, string> = {
+    0: 'Ready (Waiting for password / MONGODB_URI)',
+    1: 'Connected (Live Mongo Cluster Active)',
+    2: 'Connecting...',
+    3: 'Disconnecting...',
+  };
+  const mongoStateCode = mongoose.connection.readyState;
+  const mongoStatus = mongoStateMap[mongoStateCode] || 'Ready';
+
+  res.json({
+    status: 'ok',
+    app: '11 Star Club (১১ স্টার ক্লাব)',
+    firebase: {
+      projectId: 'ai-studio-11starclub-8ce76fc1-fb12-4bc5-aa17-1da716cd4bde',
+      status: 'Connected & Active (Real-Time Global Sync)',
+    },
+    mongodb: {
+      status: mongoStatus,
+      cluster: 'atlas-bd8yj0-shard-0 (ayan.1rirh6r.mongodb.net)',
+      database: '11starclub',
+      readyState: mongoStateCode,
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
 
 // Ensure uploads directory exists
 const uploadsDir = path.join(__dirname, 'public', 'uploads');

@@ -30,7 +30,7 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({ reducedM
 
     window.addEventListener('resize', handleResize);
 
-    const particleCount = Math.min(Math.floor((width * height) / 16000), 60);
+    const particleCount = Math.min(Math.floor((width * height) / 26000), 30);
     const particles: Array<{
       x: number;
       y: number;
@@ -45,18 +45,18 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({ reducedM
     }> = [];
 
     for (let i = 0; i < particleCount; i++) {
-      const isFlower = i % 3 === 0; // 33% Shiuli flowers, 66% golden balls
+      const isFlower = i % 2 === 0; // Exactly 50% crisp, clearly visible Shiuli flowers, 50% soft gold dust
       particles.push({
         x: Math.random() * width,
         y: Math.random() * height,
-        size: isFlower ? Math.random() * 3.5 + 3.5 : Math.random() * 4 + 1.5,
-        vx: (Math.random() - 0.5) * 0.4,
-        vy: -Math.random() * 0.5 - 0.15, // Floating gently upwards
-        alpha: Math.random() * 0.6 + 0.25,
-        alphaChange: (Math.random() * 0.006 + 0.002) * (Math.random() > 0.5 ? 1 : -1),
+        size: isFlower ? Math.random() * 2.5 + 4.5 : Math.random() * 2 + 1.5, // 9px - 14px distinct, clear Shiuli flowers
+        vx: (Math.random() - 0.5) * 0.28,
+        vy: -Math.random() * 0.38 - 0.12, // Gentle floating
+        alpha: Math.random() * 0.3 + 0.65, // High crispness & 65%-95% clear visibility
+        alphaChange: (Math.random() * 0.004 + 0.0015) * (Math.random() > 0.5 ? 1 : -1),
         type: isFlower ? 'flower' : 'gold_ball',
         rotation: Math.random() * Math.PI * 2,
-        vRot: (Math.random() - 0.5) * 0.02,
+        vRot: (Math.random() - 0.5) * 0.016,
       });
     }
 
@@ -87,25 +87,25 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({ reducedM
         const currentAlpha = Math.max(0.1, Math.min(0.9, p.alpha));
 
         if (p.type === 'flower') {
-          // Draw high-fidelity Shiuli / Kash Phool Flower (White Petals + Orange Center)
-          ctx.shadowColor = 'rgba(255, 255, 255, 0.4)';
-          ctx.shadowBlur = 4;
+          // Draw high-fidelity, vibrant & sharp Shiuli Flower (White Petals + Orange Center)
+          ctx.shadowColor = 'rgba(255, 255, 255, 0.9)';
+          ctx.shadowBlur = 2;
 
-          // Draw 8 white petals symmetrically
-          ctx.fillStyle = `rgba(255, 255, 255, ${currentAlpha * 0.95})`;
+          // Draw 8 crisp white petals symmetrically
+          ctx.fillStyle = `rgba(255, 255, 255, ${Math.min(1, currentAlpha * 1.25)})`;
           for (let j = 0; j < 8; j++) {
             ctx.save();
             ctx.rotate((j * Math.PI) / 4);
             ctx.beginPath();
-            ctx.ellipse(0, -p.size * 1.3, p.size * 0.55, p.size * 1.05, 0, 0, Math.PI * 2);
+            ctx.ellipse(0, -p.size * 1.2, p.size * 0.52, p.size * 1.0, 0, 0, Math.PI * 2);
             ctx.fill();
             ctx.restore();
           }
 
           // Draw the iconic bright orange-red center circle of Shiuli
-          ctx.fillStyle = `rgba(234, 88, 12, ${currentAlpha})`;
+          ctx.fillStyle = `rgba(249, 115, 22, ${Math.min(1, currentAlpha * 1.3)})`;
           ctx.beginPath();
-          ctx.arc(0, 0, p.size * 0.6, 0, Math.PI * 2);
+          ctx.arc(0, 0, p.size * 0.55, 0, Math.PI * 2);
           ctx.fill();
         } else {
           // Draw Glowing Golden Dust Ball with a beautiful radial gradient glow
@@ -149,7 +149,7 @@ export const ParticleBackground: React.FC<ParticleBackgroundProps> = ({ reducedM
   return (
     <canvas
       ref={canvasRef}
-      className="fixed inset-0 pointer-events-none z-0 opacity-65"
+      className="fixed inset-0 pointer-events-none z-0 opacity-85"
       aria-hidden="true"
     />
   );

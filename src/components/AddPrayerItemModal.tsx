@@ -74,13 +74,13 @@ export const AddPrayerItemModal: React.FC<AddPrayerItemModalProps> = ({
 
       if (!thumbnailUrl) {
         if (isPastedStream) {
-          thumbnailUrl = 'https://framerusercontent.com/images/yHxdiWReVZDcqvytpuT8C65KlaU.jpg?width=1314&height=666';
+          thumbnailUrl = 'https://img.youtube.com/vi/_65N3D5zTYg/hqdefault.jpg';
         } else if (urlInput.trim().includes('facebook.com') || urlInput.trim().includes('fb.watch')) {
           thumbnailUrl = 'https://images.unsplash.com/photo-1504196606672-aef5c9cefc92?w=800&q=80';
         } else if (urlInput.trim().includes('instagram.com')) {
           thumbnailUrl = 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80';
         } else {
-          thumbnailUrl = 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&q=80';
+          thumbnailUrl = 'https://img.youtube.com/vi/_65N3D5zTYg/hqdefault.jpg';
         }
       }
     } else {
@@ -91,7 +91,7 @@ export const AddPrayerItemModal: React.FC<AddPrayerItemModalProps> = ({
         mediaUrl = streamUrl.trim();
         embedUrl = streamUrl.trim();
         mediaSource = 'local';
-        thumbnailUrl = 'https://framerusercontent.com/images/yHxdiWReVZDcqvytpuT8C65KlaU.jpg?width=1314&height=666';
+        thumbnailUrl = 'https://img.youtube.com/vi/_65N3D5zTYg/hqdefault.jpg';
     }
 
     setIsSubmitting(true);

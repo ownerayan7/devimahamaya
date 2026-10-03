@@ -19,6 +19,7 @@ import { Announcement } from '../types';
 import { uploadMediaFile } from '../utils/uploadHelper';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 import { sendAppNotification } from '../utils/notificationHelper';
+import { optimizeImage } from '../utils/imageOptimizer';
 
 interface AddNoticeModalProps {
   isOpen: boolean;
@@ -50,7 +51,7 @@ export const AddNoticeModal: React.FC<AddNoticeModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleImageFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -60,12 +61,18 @@ export const AddNoticeModal: React.FC<AddNoticeModalProps> = ({
     }
 
     setSelectedNoticeFile(file);
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImagePreview(reader.result as string);
+    try {
+      const optimized = await optimizeImage(file, 900, 900, 0.7);
+      setImagePreview(optimized);
       setError('');
-    };
-    reader.readAsDataURL(file);
+    } catch {
+      const reader = new FileReader();
+      reader.onload = () => {
+        setImagePreview(reader.result as string);
+        setError('');
+      };
+      reader.readAsDataURL(file);
+    }
   };
 
   const handleRemoveImage = () => {
@@ -95,7 +102,23 @@ export const AddNoticeModal: React.FC<AddNoticeModalProps> = ({
     let finalImageUrl = imagePreview || '';
     if (selectedNoticeFile) {
       const uploadedUrl = await uploadMediaFile(selectedNoticeFile, 'notices');
-      finalImageUrl = uploadedUrl || imagePreview;
+      if (uploadedUrl && !uploadedUrl.startsWith('data:')) {
+        finalImageUrl = uploadedUrl;
+      } else {
+        finalImageUrl = imagePreview;
+      }
+    } else if (imagePreview && imagePreview.startsWith('data:')) {
+      try {
+        const res = await fetch(imagePreview);
+        const blob = await res.blob();
+        const noticeFile = new File([blob], `notice_image_${Date.now()}.jpg`, { type: blob.type || 'image/jpeg' });
+        const uploadedUrl = await uploadMediaFile(noticeFile, 'notices');
+        if (uploadedUrl && !uploadedUrl.startsWith('data:')) {
+          finalImageUrl = uploadedUrl;
+        }
+      } catch (err) {
+        console.warn('Notice image binary stream upload notice:', err);
+      }
     }
 
     const newNotice: Announcement = {

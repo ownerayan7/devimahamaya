@@ -23,11 +23,12 @@ import { NotificationSettingsModal } from '../components/NotificationSettingsMod
 import { AdminPhotoAuthModal } from '../components/AdminPhotoAuthModal';
 import { CustomPrayerCard } from '../components/CustomPrayerCard';
 import { LivePrayerSettingsModal } from '../components/LivePrayerSettingsModal';
+import { HlsVideoPlayer } from '../components/HlsVideoPlayer';
 import { deleteVideoBlob, getVideoBlob } from '../utils/videoStorageHelper';
 import { isDirectVideoUrl, parseUniversalMedia, getPublicMediaUrl } from '../utils/mediaEmbedHelper';
 import { db } from '../lib/firebase';
 import { doc, onSnapshot, setDoc, collection, addDoc, deleteDoc } from 'firebase/firestore';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer, addDeletedId } from '../utils/persistentStorage';
 import { socket } from '../lib/socket';
 import { sendAppNotification } from '../utils/notificationHelper';
 
@@ -373,6 +374,7 @@ export const SundayPrayerPage: React.FC = () => {
 
   const handleConfirmDeleteItem = async () => {
     if (itemToDeleteId) {
+      addDeletedId(itemToDeleteId);
       const updated = items.filter((i) => i.id !== itemToDeleteId);
       setItems(updated);
       try {
@@ -521,14 +523,11 @@ export const SundayPrayerPage: React.FC = () => {
           {liveConfig.isLiveActive ? (
             (() => {
               const parsedLive = parseUniversalMedia(liveConfig.liveUrl, 'video');
-              if (parsedLive.isDirectVideo) {
+              if (parsedLive.isDirectVideo || isDirectVideoUrl(liveConfig.liveUrl)) {
                 return (
-                  <video
-                    controls
-                    autoPlay
-                    playsInline
+                  <HlsVideoPlayer
                     src={getPublicMediaUrl(parsedLive.embedUrl || liveConfig.liveUrl)}
-                    className="w-full h-full object-contain bg-black"
+                    autoPlay={true}
                   />
                 );
               }
@@ -542,30 +541,21 @@ export const SundayPrayerPage: React.FC = () => {
                 />
               );
             })()
-          ) : (liveConfig.fallbackUrl && !liveConfig.fallbackUrl.startsWith('blob:') && isDirectVideoUrl(liveConfig.fallbackUrl)) ? (
-            <video
-              controls
-              playsInline
-              src={getPublicMediaUrl(liveConfig.fallbackUrl)}
-              className="w-full h-full object-contain bg-black"
+          ) : (liveConfig.fallbackUrl && (isDirectVideoUrl(liveConfig.fallbackUrl) || liveConfig.fallbackUrl.includes('m3u8') || liveConfig.fallbackUrl.includes('cloudflare') || liveConfig.fallbackUrl.includes('bunny') || liveConfig.fallbackUrl.includes('hls'))) ? (
+            <HlsVideoPlayer
+              src={getPublicMediaUrl(resolvedFallbackBlobUrl || liveConfig.fallbackUrl)}
             />
           ) : resolvedFallbackBlobUrl ? (
-            <video
-              controls
-              playsInline
+            <HlsVideoPlayer
               src={getPublicMediaUrl(resolvedFallbackBlobUrl)}
-              className="w-full h-full object-contain bg-black"
             />
           ) : liveConfig.fallbackUrl ? (
             (() => {
               const parsedFallback = parseUniversalMedia(liveConfig.fallbackUrl, 'video');
               if (parsedFallback.isDirectVideo) {
                 return (
-                  <video
-                    controls
-                    playsInline
+                  <HlsVideoPlayer
                     src={getPublicMediaUrl(parsedFallback.embedUrl || liveConfig.fallbackUrl)}
-                    className="w-full h-full object-contain bg-black"
                   />
                 );
               }

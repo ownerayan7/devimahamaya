@@ -111,16 +111,16 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
     }
   }, []);
 
-  // Generate floating Shiuli blossoms and golden dust particles
+  // Generate floating Shiuli blossoms and golden dust particles (Subtle & Ultra-smooth)
   useEffect(() => {
-    const newParticles: Particle[] = Array.from({ length: 32 }, (_, i) => ({
+    const newParticles: Particle[] = Array.from({ length: 16 }, (_, i) => ({
       id: i,
       x: Math.random() * 100,
       y: Math.random() * 100,
-      size: i % 4 === 0 ? 18 : i % 2 === 0 ? 8 : 4,
+      size: i % 3 === 0 ? 22 : i % 2 === 0 ? 16 : 12,
       rotation: Math.random() * 360,
-      type: i % 5 === 0 ? 'flower' : i % 3 === 0 ? 'petal' : i % 2 === 0 ? 'sparkle' : 'ember',
-      speed: 1.5 + Math.random() * 2.5,
+      type: i % 2 === 0 ? 'flower' : 'sparkle',
+      speed: 1.0 + Math.random() * 1.5,
     }));
     setParticles(newParticles);
   }, []);
@@ -296,8 +296,8 @@ export const WelcomeScreen: React.FC<WelcomeScreenProps> = ({
             className="absolute"
           >
             {p.type === 'flower' ? (
-              <svg width="20" height="20" viewBox="0 0 24 24" className="filter drop-shadow-[0_0_8px_rgba(251,191,36,0.6)]">
-                <circle cx="12" cy="12" r="3" fill="#ea580c" />
+              <svg width={p.size} height={p.size} viewBox="0 0 24 24" className="filter drop-shadow-[0_0_12px_rgba(251,191,36,0.8)]">
+                <circle cx="12" cy="12" r="3.5" fill="#ea580c" />
                 <path d="M12,2 Q14,8 12,9 Q10,8 12,2 Z" fill="#ffffff" />
                 <path d="M12,22 Q14,16 12,15 Q10,16 12,22 Z" fill="#ffffff" />
                 <path d="M2,12 Q8,14 9,12 Q8,10 2,12 Z" fill="#ffffff" />

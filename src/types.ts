@@ -231,3 +231,17 @@ export interface GyanSaradaChannel {
   createdAt?: string | number;
 }
 
+export type PorboLinkCategory = 'live' | 'youtube' | 'facebook' | 'instagram' | 'gdrive';
+
+export interface PorboLinkItem {
+  id: string;
+  porboIndex: number; // 0 for Porbo 1, 1 for Porbo 2, etc.
+  porboTitle: string;
+  category: PorboLinkCategory;
+  title: string;
+  url: string;
+  isLiveActive?: boolean;
+  createdAt?: number;
+  addedBy?: string;
+}
+

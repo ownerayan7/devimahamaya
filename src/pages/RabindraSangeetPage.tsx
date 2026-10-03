@@ -16,7 +16,7 @@ import { broadcastMediaPlaybackStarted, registerHtmlMediaElement, subscribeToMed
 import { updateLockScreenMediaMetadata, pauseLockScreenMediaSession, clearLockScreenMediaMetadata } from '../utils/mediaSessionHelper';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer, addDeletedId } from '../utils/persistentStorage';
 import { socket } from '../lib/socket';
 import { sendAppNotification } from '../utils/notificationHelper';
 
@@ -264,6 +264,7 @@ export const RabindraSangeetPage: React.FC = () => {
 
   const handleConfirmDeleteSong = async () => {
     if (songToDeleteId) {
+      addDeletedId(songToDeleteId);
       const updated = songs.filter((i) => i.id !== songToDeleteId);
       setSongs(updated);
       if (activeSong?.id === songToDeleteId) {

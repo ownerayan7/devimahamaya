@@ -56,16 +56,49 @@ export async function idbSet<T>(key: string, value: T): Promise<void> {
   }
 }
 
+const GLOBAL_DELETED_IDS_KEY = 'eleven_star_club_global_deleted_ids_v1';
+
+export function getDeletedIds(): string[] {
+  try {
+    const raw = localStorage.getItem(GLOBAL_DELETED_IDS_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addDeletedId(id: string | number): void {
+  try {
+    const strId = String(id);
+    const existing = getDeletedIds();
+    if (!existing.includes(strId)) {
+      const updated = [...existing, strId];
+      localStorage.setItem(GLOBAL_DELETED_IDS_KEY, JSON.stringify(updated));
+    }
+  } catch (e) {
+    console.warn('Error saving deleted ID:', e);
+  }
+}
+
+export function isDeleted(id: string | number): boolean {
+  if (!id) return false;
+  const deletedList = getDeletedIds();
+  return deletedList.includes(String(id));
+}
+
 /**
  * Saves items reliably to both IndexedDB and LocalStorage.
  */
 export async function savePersistentItems<T extends { id: string | number }>(key: string, items: T[]): Promise<void> {
+  const deletedList = getDeletedIds();
+  const filtered = items.filter((item) => item && !deletedList.includes(String(item.id)));
+
   // 1. Save to IndexedDB (unlimited quota)
-  await idbSet(key, items);
+  await idbSet(key, filtered);
 
   // 2. Save to LocalStorage (try-catch against QuotaExceededError)
   try {
-    localStorage.setItem(key, JSON.stringify(items));
+    localStorage.setItem(key, JSON.stringify(filtered));
   } catch (e) {
     console.warn(`LocalStorage quota reached for key ${key}, relying on IndexedDB persistence.`);
   }
@@ -75,6 +108,7 @@ export async function savePersistentItems<T extends { id: string | number }>(key
  * Loads items reliably from LocalStorage and IndexedDB, returning merged non-duplicate list.
  */
 export async function loadPersistentItems<T extends { id: string | number }>(key: string): Promise<T[]> {
+  const deletedList = getDeletedIds();
   let localItems: T[] = [];
   try {
     const saved = localStorage.getItem(key);
@@ -93,10 +127,14 @@ export async function loadPersistentItems<T extends { id: string | number }>(key
   // Merge items by ID preserving uniqueness
   const map = new Map<string | number, T>();
   for (const item of idbItems) {
-    if (item && item.id !== undefined && item.id !== null) map.set(item.id, item);
+    if (item && item.id !== undefined && item.id !== null && !deletedList.includes(String(item.id))) {
+      map.set(item.id, item);
+    }
   }
   for (const item of localItems) {
-    if (item && item.id !== undefined && item.id !== null && !map.has(item.id)) map.set(item.id, item);
+    if (item && item.id !== undefined && item.id !== null && !deletedList.includes(String(item.id)) && !map.has(item.id)) {
+      map.set(item.id, item);
+    }
   }
 
   const merged = Array.from(map.values());
@@ -113,20 +151,48 @@ export async function loadPersistentItems<T extends { id: string | number }>(key
 }
 
 /**
- * Utility to merge items from Firestore snapshot with local items, ensuring newly added local items are never overwritten.
+ * Utility to merge items from Firestore snapshot with local items.
+ * Guarantees that:
+ * 1. Newly uploaded local unsynced items are preserved and synced.
+ * 2. Items deleted from Firestore by an Admin on any device are automatically purged from local storage on all other devices!
  */
 export function mergeItemsWithLocal<T extends { id: string | number; createdAt?: any }>(
   firestoreItems: T[],
   localItems: T[]
 ): T[] {
+  const deletedList = getDeletedIds();
+  const firestoreIds = new Set(firestoreItems.map((f) => String(f.id)));
   const map = new Map<string | number, T>();
-  // First add local items
+
+  // 1. Process local items
   for (const item of localItems) {
-    if (item && item.id !== undefined && item.id !== null) map.set(item.id, item);
+    if (!item || item.id === undefined || item.id === null) continue;
+    const strId = String(item.id);
+
+    // If item was explicitly deleted, skip
+    if (deletedList.includes(strId)) continue;
+
+    // SAFE DELETION DETECTED: If item was previously synced to cloud, but is now missing from cloud snapshot,
+    // it was deleted by an Admin on another device. Purge it locally!
+    if ((item as any).synced === true && !firestoreIds.has(strId)) {
+      addDeletedId(strId);
+      continue;
+    }
+
+    map.set(item.id, item);
   }
-  // Then add/overwrite with Firestore items
+
+  // 2. Process Firestore cloud items
   for (const item of firestoreItems) {
-    if (item && item.id !== undefined && item.id !== null) map.set(item.id, item);
+    if (!item || item.id === undefined || item.id === null) continue;
+    const strId = String(item.id);
+
+    // If item was explicitly deleted on this device, skip
+    if (deletedList.includes(strId)) continue;
+
+    // Mark as synced since it exists in Firestore
+    const syncedItem = { ...item, synced: true };
+    map.set(item.id, syncedItem);
   }
 
   const merged = Array.from(map.values());
@@ -169,8 +235,14 @@ export async function fetchFromFallbackServer<T>(category: string): Promise<T[]>
     if (res.ok) {
       const records = await res.json();
       if (Array.isArray(records)) {
-        // Filter records of this specific category
-        const filtered = records.filter((r: any) => r.category === category);
+        const deletedList = getDeletedIds();
+        // Filter records of this specific category AND exclude deleted items
+        const filtered = records.filter((r: any) => {
+          if (r.category !== category) return false;
+          const itemId = String(r.metadata?.id || r.id);
+          return !deletedList.includes(itemId);
+        });
+
         // Map metadata or format back to T
         return filtered.map((r: any) => {
           if (r.metadata) {

@@ -38,7 +38,7 @@ import { broadcastMediaPlaybackStarted, subscribeToMediaStop, registerHtmlMediaE
 import { getDeviceId, isDeviceUploader } from '../utils/deviceHelper';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
-import { loadPersistentItems, savePersistentItems } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, addDeletedId, isDeleted, mergeItemsWithLocal } from '../utils/persistentStorage';
 import { sendAppNotification } from '../utils/notificationHelper';
 
 const OFFICIAL_STORAGE_KEY = '11star_custom_official_videos_v5';
@@ -55,7 +55,7 @@ export interface UnifiedVideoCardItem {
   description: string;
   sourceType: 'official' | 'member';
   category: string;
-  videoType: 'youtube' | 'local' | 'facebook' | 'direct' | 'drive';
+  videoType: 'youtube' | 'local' | 'facebook' | 'direct' | 'drive' | 'stream';
   youtubeId?: string;
   youtubeUrl?: string;
   videoFileUrl?: string;
@@ -156,15 +156,16 @@ export const VideosPage: React.FC<VideosPageProps> = () => {
         });
       });
 
-      // Smart Real-time Merge (Always preserves the 4 default official videos + any cloud uploads)
-      const merged = [
-        ...firestoreList,
-        ...DEFAULT_OFFICIAL_VIDEOS_4.filter((init) => !firestoreList.some((f) => f.id === init.id))
-      ];
-
-      const sorted = merged.sort((a, b) => getTimestamp(b) - getTimestamp(a));
-      setOfficialVideos(sorted);
-      savePersistentItems(OFFICIAL_STORAGE_KEY, sorted);
+      loadPersistentItems<VideoItem>(OFFICIAL_STORAGE_KEY).then((local) => {
+        const merged = mergeItemsWithLocal(firestoreList, local);
+        const filteredWithDefaults = [
+          ...merged,
+          ...DEFAULT_OFFICIAL_VIDEOS_4.filter((init) => !merged.some((f) => f.id === init.id) && !isDeleted(init.id))
+        ];
+        const sorted = filteredWithDefaults.sort((a, b) => getTimestamp(b) - getTimestamp(a));
+        setOfficialVideos(sorted);
+        savePersistentItems(OFFICIAL_STORAGE_KEY, sorted);
+      });
     }, (err) => {
       console.warn('Firestore officialVideos notice:', err);
     });
@@ -189,15 +190,16 @@ export const VideosPage: React.FC<VideosPageProps> = () => {
         });
       });
 
-      // Smart Real-time Merge (Always preserves the 1 default sodosoo video + any cloud uploads)
-      const merged = [
-        ...firestoreList,
-        ...DEFAULT_MEMBER_VIDEOS_1.filter((init) => !firestoreList.some((f) => f.id === init.id))
-      ];
-
-      const sorted = merged.sort((a, b) => getTimestamp(b) - getTimestamp(a));
-      setMemberVideos(sorted);
-      savePersistentItems(MEMBER_STORAGE_KEY, sorted);
+      loadPersistentItems<MemberVideoItem>(MEMBER_STORAGE_KEY).then((local) => {
+        const merged = mergeItemsWithLocal(firestoreList, local);
+        const filteredWithDefaults = [
+          ...merged,
+          ...DEFAULT_MEMBER_VIDEOS_1.filter((init) => !merged.some((f) => f.id === init.id) && !isDeleted(init.id))
+        ];
+        const sorted = filteredWithDefaults.sort((a, b) => getTimestamp(b) - getTimestamp(a));
+        setMemberVideos(sorted);
+        savePersistentItems(MEMBER_STORAGE_KEY, sorted);
+      });
     }, (err) => {
       console.warn('Firestore memberVideos notice:', err);
     });
@@ -212,7 +214,8 @@ export const VideosPage: React.FC<VideosPageProps> = () => {
     // Official Club Videos
     officialVideos.forEach((v) => {
       let vType: UnifiedVideoCardItem['videoType'] = 'youtube';
-      const isStreamOrLocal = v.videoType === 'local' || v.videoType === 'stream' || (v.videoFileUrl && v.videoFileUrl.endsWith('.m3u8'));
+      const checkUrl = (v.videoFileUrl || v.youtubeUrl || '').toLowerCase();
+      const isStreamOrLocal = v.videoType === 'local' || v.videoType === 'stream' || checkUrl.includes('m3u8') || checkUrl.includes('cloudflare') || checkUrl.includes('bunny') || checkUrl.includes('hls');
       if (isStreamOrLocal) {
         vType = 'local';
       } else if (v.youtubeUrl && isFacebookVideoUrl(v.youtubeUrl)) {
@@ -247,7 +250,8 @@ export const VideosPage: React.FC<VideosPageProps> = () => {
     // Member Submitted Videos
     memberVideos.forEach((m) => {
       let vType: UnifiedVideoCardItem['videoType'] = 'youtube';
-      const isStreamOrLocal = m.videoType === 'local' || m.videoType === 'stream' || (m.videoFileUrl && m.videoFileUrl.endsWith('.m3u8'));
+      const checkUrl = (m.videoFileUrl || m.youtubeUrl || '').toLowerCase();
+      const isStreamOrLocal = m.videoType === 'local' || m.videoType === 'stream' || checkUrl.includes('m3u8') || checkUrl.includes('cloudflare') || checkUrl.includes('bunny') || checkUrl.includes('hls');
       if (isStreamOrLocal) {
         vType = 'local';
       } else if (m.youtubeUrl && isFacebookVideoUrl(m.youtubeUrl)) {
@@ -359,6 +363,8 @@ export const VideosPage: React.FC<VideosPageProps> = () => {
 
   // Execute Deletion
   const executeDelete = async (item: UnifiedVideoCardItem) => {
+    addDeletedId(item.id);
+
     if (item.sourceType === 'official') {
       const updated = officialVideos.filter((v) => v.id !== item.id);
       setOfficialVideos(updated);
@@ -822,7 +828,9 @@ const VideoPlayerEngine: React.FC<VideoPlayerEngineProps> = ({ item, autoPlay = 
   const [error, setError] = useState<string>('');
   const videoRef = useRef<HTMLVideoElement | null>(null);
 
-  const mediaUrl = item.youtubeUrl || item.videoFileUrl || '';
+  const isStreamType = item.videoType === 'stream' || item.videoType === 'local' || (item.videoFileUrl && (item.videoFileUrl.includes('m3u8') || item.videoFileUrl.includes('cloudflare') || item.videoFileUrl.includes('bunny') || item.videoFileUrl.includes('hls')));
+  const rawMediaUrl = isStreamType ? (item.videoFileUrl || item.youtubeUrl || '') : (item.youtubeUrl || item.videoFileUrl || '');
+  const mediaUrl = getPublicMediaUrl(rawMediaUrl);
   const parsed = parseUniversalMedia(mediaUrl);
 
   // Subscribe to mutual exclusivity media stop event

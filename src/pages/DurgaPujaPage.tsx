@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
   Flame,
@@ -9,14 +9,25 @@ import {
   Eye,
   Clock,
   Music,
-  Sun,
-  Moon,
-  HeartHandshake,
-  AlertCircle
+  Plus,
+  Radio,
+  Video,
+  Facebook,
+  Instagram,
+  Folder,
+  Trash2,
+  Globe,
+  RadioTower,
+  PlayCircle
 } from 'lucide-react';
 import { PUJA_SCHEDULE_2026, CLUB_INFO, ANNOUNCEMENTS } from '../data/clubData';
 import { ImageLightbox } from '../components/ImageLightbox';
 import { AdminStorageAccessCard } from '../components/AdminStorageAccessCard';
+import { AddPorboLinkModal } from '../components/AddPorboLinkModal';
+import { DeletePorboLinkModal } from '../components/DeletePorboLinkModal';
+import { PorboLinkItem } from '../types';
+import { db } from '../lib/firebase';
+import { collection, onSnapshot, query, addDoc, deleteDoc, doc } from 'firebase/firestore';
 
 interface DurgaPujaPageProps {
   onOpenAdminStorage?: () => void;
@@ -24,6 +35,106 @@ interface DurgaPujaPageProps {
 
 export const DurgaPujaPage: React.FC<DurgaPujaPageProps> = ({ onOpenAdminStorage }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [porboLinks, setPorboLinks] = useState<PorboLinkItem[]>([]);
+  const [isAddLinkModalOpen, setIsAddLinkModalOpen] = useState(false);
+  const [selectedPorboForModal, setSelectedPorboForModal] = useState<number>(0);
+
+  // State for delete modal
+  const [deletingLink, setDeletingLink] = useState<PorboLinkItem | null>(null);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+
+  // Subscribe to real-time Porbo Links from Firestore
+  useEffect(() => {
+    let unsubscribe = () => {};
+    try {
+      const q = query(collection(db, 'durgapujo_porbo_links'));
+      unsubscribe = onSnapshot(
+        q,
+        (snapshot) => {
+          const linksData: PorboLinkItem[] = [];
+          snapshot.forEach((docSnapshot) => {
+            const data = docSnapshot.data();
+            linksData.push({
+              ...data,
+              id: docSnapshot.id, // Explicitly enforce Firestore doc ID
+            } as PorboLinkItem);
+          });
+          setPorboLinks(linksData);
+        },
+        (error) => {
+          console.warn('Porbo links Firestore subscription warning:', error);
+        }
+      );
+    } catch (err) {
+      console.warn('Firestore fallback setup warning:', err);
+    }
+
+    return () => unsubscribe();
+  }, []);
+
+  const handleOpenAddLink = (porboIdx: number) => {
+    setSelectedPorboForModal(porboIdx);
+    setIsAddLinkModalOpen(true);
+  };
+
+  const handleSavePorboLink = async (linkData: Omit<PorboLinkItem, 'id'>) => {
+    try {
+      await addDoc(collection(db, 'durgapujo_porbo_links'), linkData);
+    } catch (err: any) {
+      console.error('Error saving Porbo link to Firestore:', err);
+      throw new Error(err?.message || 'Firestore connection failed');
+    }
+  };
+
+  const handleConfirmDeleteLink = async (linkId: string) => {
+    if (!linkId) {
+      alert('ত্রুটি: লিঙ্কের সঠিক আইডি পাওয়া যায়নি!');
+      return;
+    }
+
+    try {
+      // Optimistic instant UI update
+      setPorboLinks((prev) => prev.filter((item) => item.id !== linkId));
+      await deleteDoc(doc(db, 'durgapujo_porbo_links', linkId));
+    } catch (err: any) {
+      console.error('Error deleting link from Firestore:', err);
+      throw err;
+    }
+  };
+
+  const renderCategoryIcon = (category: string) => {
+    switch (category) {
+      case 'live':
+        return <Radio className="w-3.5 h-3.5 text-red-400 animate-pulse" />;
+      case 'youtube':
+        return <Video className="w-3.5 h-3.5 text-red-400" />;
+      case 'facebook':
+        return <Facebook className="w-3.5 h-3.5 text-blue-400" />;
+      case 'instagram':
+        return <Instagram className="w-3.5 h-3.5 text-pink-400" />;
+      case 'gdrive':
+        return <Globe className="w-3.5 h-3.5 text-emerald-400" />;
+      default:
+        return <ExternalLink className="w-3.5 h-3.5 text-amber-400" />;
+    }
+  };
+
+  const renderCategoryBadgeColor = (category: string) => {
+    switch (category) {
+      case 'live':
+        return 'bg-red-600/30 border-red-500/50 text-red-200 hover:bg-red-600/50';
+      case 'youtube':
+        return 'bg-red-700/20 border-red-500/40 text-red-300 hover:bg-red-700/40';
+      case 'facebook':
+        return 'bg-blue-600/20 border-blue-500/40 text-blue-300 hover:bg-blue-600/40';
+      case 'instagram':
+        return 'bg-pink-600/20 border-pink-500/40 text-pink-300 hover:bg-pink-600/40';
+      case 'gdrive':
+        return 'bg-emerald-600/20 border-emerald-500/40 text-emerald-300 hover:bg-emerald-600/40';
+      default:
+        return 'bg-amber-500/20 border-amber-500/40 text-amber-300 hover:bg-amber-500/40';
+    }
+  };
 
   return (
     <div className="pt-24 sm:pt-28 pb-20 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-16">
@@ -36,17 +147,28 @@ export const DurgaPujaPage: React.FC<DurgaPujaPageProps> = ({ onOpenAdminStorage
       >
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-gradient-to-r from-amber-500/20 via-red-500/20 to-amber-500/20 border border-amber-500/40 text-amber-200 text-xs sm:text-sm font-semibold shadow-[0_0_20px_rgba(245,158,11,0.25)]">
           <Flame className="w-4 h-4 text-red-500 animate-pulse" />
-          <span>শারদীয়া দুর্গোৎসব ২০২৬</span>
+          <span>শারদীয়া দুর্গোৎসব ২০২৬ • ১১ স্টার ক্লাব</span>
           <Flame className="w-4 h-4 text-red-500 animate-pulse" />
         </div>
 
         <h1 className="text-3xl sm:text-5xl md:text-6xl font-extrabold font-serif-bengali text-gold-gradient drop-shadow-lg">
-          শারদীয়া দুর্গাপূজা ২০২৬ — সময়সূচী ও দিনপঞ্জি
+          শারদীয়া দুর্গাপূজা ২০২৬ — সময়সূচী ও সরাসরি লাইভ পোর্টাল
         </h1>
 
         <p className="text-sm sm:text-base text-stone-300 max-w-2xl mx-auto leading-relaxed">
-          11 স্টার ক্লাবের পক্ষ থেকে সকল ভক্ত ও শুভানুধ্যায়ীদের জানাই শারদীয়া দুর্গোৎসবের আন্তরিক প্রীতি, শুভেচ্ছা ও অভিনন্দন। পূজার সম্পূর্ণ নির্ঘণ্ট নিচে প্রকাশ করা হলো।
+          11 স্টার ক্লাবের পক্ষ থেকে সকল ভক্ত ও শুভানুধ্যায়ীদের জানাই শারদীয়া দুর্গোৎসবের প্রীতি ও শুভেচ্ছা। প্রতিটি পর্বের (খুঁটি পূজা, মহালয়া, ষষ্ঠী থেকে বিজয়া দশমী) সরাসরি লাইভ স্ট্রিমিং ও সোশ্যাল মিডিয়া লিঙ্ক নিচে প্রকাশ করা রয়েছে।
         </p>
+
+        {/* Global Admin Link Add Action Bar */}
+        <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+          <button
+            onClick={() => handleOpenAddLink(0)}
+            className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-red-600 via-amber-500 to-red-600 hover:from-red-500 hover:to-amber-400 text-black font-extrabold text-xs sm:text-sm shadow-[0_0_25px_rgba(239,68,68,0.5)] border border-yellow-200 transition-all flex items-center gap-2 hover:scale-105 active:scale-95"
+          >
+            <Plus className="w-4 h-4 stroke-[3]" />
+            <span>+ পর্বভিত্তিক লাইভ ও সোশ্যাল লিঙ্ক যুক্ত করুন (Admin)</span>
+          </button>
+        </div>
       </motion.div>
 
       {/* Khuti Puja Notice Highlight Card */}
@@ -105,73 +227,177 @@ export const DurgaPujaPage: React.FC<DurgaPujaPageProps> = ({ onOpenAdminStorage
         </div>
       </section>
 
-      {/* Puja 2026 Full Day-by-Day Schedule */}
+      {/* Puja 2026 Full Day-by-Day Schedule & Porbo Link Section */}
       <section className="space-y-8">
         <div className="text-center space-y-2">
           <div className="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-amber-400">
             <Calendar className="w-4 h-4" />
-            <span>পঞ্জিকানুযায়ী দিনপঞ্জি</span>
+            <span>পর্বভিত্তিক অনুষ্ঠান ও সরাসরি সম্প্রচার</span>
           </div>
           <h2 className="text-2xl sm:text-4xl font-bold font-serif-bengali text-gold-gradient">
-            পূজার দিনভিত্তিক পূর্ণাঙ্গ নির্ঘণ্ট
+            পূজার প্রতিটি পর্বের সময়সূচী ও ডাইরেক্ট লিঙ্ক
           </h2>
-          <p className="text-xs sm:text-sm text-stone-400">
-            খুঁটি পূজা থেকে বিজয়া দশমী পর্যন্ত সমস্ত পর্ব
+          <p className="text-xs sm:text-sm text-stone-400 max-w-xl mx-auto">
+            যে পর্বের লাইভ চলছে সরাসরি ক্লিক করে দেখুন। লাইভ শেষে ওই পর্বের ইউটিউব, ফেসবুক, ইনস্টাগ্রাম ও গুগল ড্রাইবের সব ভিডিও ও অ্যালবামের লিঙ্ক নিচে সরাসরি পাবেন।
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {PUJA_SCHEDULE_2026.map((item, idx) => (
-            <motion.div
-              key={idx}
-              initial={{ opacity: 0, y: 20 }}
-              whileInView={{ opacity: 1, y: 0 }}
-              viewport={{ once: true }}
-              transition={{ duration: 0.4, delay: idx * 0.08 }}
-              className={`rounded-2xl p-6 glass-card glass-card-hover border relative overflow-hidden flex flex-col justify-between space-y-4 ${
-                item.highlight
-                  ? 'border-amber-500/40 bg-gradient-to-b from-[#22100a]/80 to-[#120708]/90 shadow-[0_0_25px_rgba(245,158,11,0.15)]'
-                  : 'border-white/10'
-              }`}
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                    পর্ব 0{idx + 1}
-                  </span>
-                  {item.highlight && (
-                    <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded bg-red-600/40 text-red-200 border border-red-500/40">
-                      মহাপর্ব
+          {PUJA_SCHEDULE_2026.map((item, idx) => {
+            const linksForPorbo = porboLinks.filter((l) => Number(l.porboIndex) === idx);
+            const activeLiveLink = linksForPorbo.find((l) => l.category === 'live' && l.isLiveActive);
+
+            return (
+              <motion.div
+                key={idx}
+                initial={{ opacity: 0, y: 20 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true }}
+                transition={{ duration: 0.4, delay: idx * 0.08 }}
+                className={`rounded-3xl p-6 glass-card glass-card-hover border relative overflow-hidden flex flex-col justify-between space-y-5 ${
+                  activeLiveLink
+                    ? 'border-red-500 bg-gradient-to-b from-[#2e090c]/90 via-[#180507]/95 to-black shadow-[0_0_35px_rgba(239,68,68,0.4)]'
+                    : item.highlight
+                    ? 'border-amber-500/40 bg-gradient-to-b from-[#22100a]/80 to-[#120708]/90 shadow-[0_0_25px_rgba(245,158,11,0.15)]'
+                    : 'border-white/10 bg-black/40'
+                }`}
+              >
+                <div className="space-y-4">
+                  {/* Top Header */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold px-3 py-1 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                      পর্ব 0{idx + 1}
                     </span>
+                    {activeLiveLink ? (
+                      <span className="text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full bg-red-600 text-white border border-red-400 flex items-center gap-1.5 shadow-[0_0_12px_rgba(239,68,68,0.8)] animate-pulse">
+                        <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                        <span>🔴 লাইভ চলছে</span>
+                      </span>
+                    ) : (
+                      item.highlight && (
+                        <span className="text-[10px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded bg-red-600/40 text-red-200 border border-red-500/40">
+                          মহাপর্ব
+                        </span>
+                      )
+                    )}
+                  </div>
+
+                  {/* Title & Dates */}
+                  <div>
+                    <h3 className="text-xl font-bold font-serif-bengali text-white">
+                      {item.event}
+                    </h3>
+
+                    <div className="space-y-1 text-xs mt-2">
+                      <div className="flex items-center gap-1.5 text-amber-300 font-semibold">
+                        <Calendar className="w-3.5 h-3.5 text-amber-400" />
+                        <span>বাংলা: {item.dateBengali}</span>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-stone-300">
+                        <Clock className="w-3.5 h-3.5 text-amber-400" />
+                        <span>ইংরেজি: {item.dateEnglish}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <p className="text-xs sm:text-sm text-stone-300/90 leading-relaxed pt-2 border-t border-white/10">
+                    {item.description}
+                  </p>
+
+                  {/* Active Live Direct Watch Banner */}
+                  {activeLiveLink && (
+                    <div className="p-3.5 rounded-2xl bg-gradient-to-r from-red-950 via-red-900 to-red-950 border-2 border-red-500/80 shadow-[0_0_20px_rgba(239,68,68,0.5)] space-y-2">
+                      <div className="flex items-center justify-between text-xs font-black text-red-200">
+                        <div className="flex items-center gap-1.5">
+                          <Radio className="w-4 h-4 text-red-400 animate-ping" />
+                          <span>🔴 সরাসরি লাইভ টেলিকাস্ট চলছে</span>
+                        </div>
+                      </div>
+                      <p className="text-xs text-white font-medium line-clamp-1">{activeLiveLink.title}</p>
+                      <a
+                        href={activeLiveLink.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full py-2.5 px-3 rounded-xl bg-gradient-to-r from-red-600 to-red-500 hover:from-red-500 hover:to-red-400 text-white font-black text-xs flex items-center justify-center gap-2 shadow-lg transition-all hover:scale-[1.02] border border-red-300"
+                      >
+                        <PlayCircle className="w-4 h-4 fill-current text-white animate-bounce" />
+                        <span>এক ক্লিকে সরাসরি লাইভ দেখুন</span>
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
                   )}
+
+                  {/* Links Section for this Porbo */}
+                  <div className="space-y-2 pt-2 border-t border-white/10">
+                    <div className="flex items-center justify-between text-[11px] font-bold text-amber-300">
+                      <span className="flex items-center gap-1">
+                        <RadioTower className="w-3.5 h-3.5 text-amber-400" />
+                        <span>সরাসরি লিঙ্ক ও অফিশিয়াল মিডিয়া ({linksForPorbo.length})</span>
+                      </span>
+                    </div>
+
+                    {linksForPorbo.length > 0 ? (
+                      <div className="space-y-2">
+                        {linksForPorbo.map((link) => (
+                          <div
+                            key={link.id}
+                            className="p-2.5 rounded-xl bg-black/60 border border-white/10 hover:border-amber-500/40 transition-all flex items-center justify-between gap-2 group"
+                          >
+                            <a
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 min-w-0 flex-1 hover:text-amber-300 text-xs font-semibold text-stone-200"
+                            >
+                              <span className={`p-1.5 rounded-lg border shrink-0 ${renderCategoryBadgeColor(link.category)}`}>
+                                {renderCategoryIcon(link.category)}
+                              </span>
+                              <span className="truncate">{link.title}</span>
+                              <ExternalLink className="w-3 h-3 text-stone-400 shrink-0 opacity-75 group-hover:opacity-100" />
+                            </a>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                setDeletingLink(link);
+                                setIsDeleteModalOpen(true);
+                              }}
+                              title="লিঙ্ক মুছুন (Admin)"
+                              className="p-1.5 rounded-lg text-stone-400 hover:text-red-400 hover:bg-red-500/20 transition-colors shrink-0"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-3 rounded-xl bg-black/30 border border-white/5 text-[11px] text-stone-400 text-center italic">
+                        এখনও কোনো লিঙ্ক যুক্ত করা হয়নি।
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                <h3 className="text-xl font-bold font-serif-bengali text-white">
-                  {item.event}
-                </h3>
+                {/* Footer Action: Admin Add Link Button for this specific Porbo */}
+                <div className="pt-3 border-t border-white/10 flex items-center justify-between">
+                  <div className="text-[11px] text-amber-400/80 font-medium flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>11 স্টার ক্লাব</span>
+                  </div>
 
-                <div className="space-y-1 text-xs">
-                  <div className="flex items-center gap-1.5 text-amber-300 font-semibold">
-                    <Calendar className="w-3.5 h-3.5 text-amber-400" />
-                    <span>বাংলা: {item.dateBengali}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-stone-300">
-                    <Clock className="w-3.5 h-3.5 text-amber-400" />
-                    <span>ইংরেজি: {item.dateEnglish}</span>
-                  </div>
+                  <button
+                    onClick={() => handleOpenAddLink(idx)}
+                    className="px-3 py-1.5 rounded-xl bg-amber-500/20 hover:bg-amber-500/35 border border-amber-500/40 text-amber-200 font-bold text-[11px] flex items-center gap-1 transition-all hover:scale-105 active:scale-95"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>লিঙ্ক যুক্ত করুন</span>
+                  </button>
                 </div>
-
-                <p className="text-xs sm:text-sm text-stone-300/90 leading-relaxed pt-2 border-t border-white/5">
-                  {item.description}
-                </p>
-              </div>
-
-              <div className="text-[11px] text-amber-400/80 font-medium flex items-center gap-1">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>11 স্টার ক্লাব দুর্গাপূজা প্রাঙ্গণ</span>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
         </div>
       </section>
 
@@ -231,6 +457,25 @@ export const DurgaPujaPage: React.FC<DurgaPujaPageProps> = ({ onOpenAdminStorage
         imageUrl={CLUB_INFO.images.khutiPujaNotice}
         title="শারদীয়া দুর্গাপূজা ২০২৬ — খুঁটি পূজার অফিসিয়াল বিজ্ঞপ্তি"
         subtitle="11 স্টার ক্লাব"
+      />
+
+      {/* Modal for Admin Adding Links */}
+      <AddPorboLinkModal
+        isOpen={isAddLinkModalOpen}
+        onClose={() => setIsAddLinkModalOpen(false)}
+        initialPorboIndex={selectedPorboForModal}
+        onSaveLink={handleSavePorboLink}
+      />
+
+      {/* Modal for Admin Deleting Links */}
+      <DeletePorboLinkModal
+        isOpen={isDeleteModalOpen}
+        linkToDelete={deletingLink}
+        onClose={() => {
+          setIsDeleteModalOpen(false);
+          setDeletingLink(null);
+        }}
+        onConfirmDelete={handleConfirmDeleteLink}
       />
 
       {/* Admin Locked Club Storage Access */}

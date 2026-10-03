@@ -38,6 +38,7 @@ import { CLUB_INFO } from './data/clubData';
 import { db } from './lib/firebase';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { dispatchNativePushNotification, getStoredNotificationSettings, checkSundayPrayerLeadReminder, playNotificationChime } from './utils/notificationHelper';
+import { getSocket } from './utils/socketClient';
 
 export function App() {
   const [welcomeComplete, setWelcomeComplete] = useState<boolean>(false);
@@ -83,6 +84,25 @@ export function App() {
         Notification.requestPermission().catch(console.warn);
       }
     }
+  }, []);
+
+  // Active Socket.IO WebSocket real-time connection across all pages
+  useEffect(() => {
+    const socket = getSocket();
+
+    const handleRealtimeSync = (eventData: any) => {
+      console.log('[Socket.IO Real-time Event Received]:', eventData);
+    };
+
+    socket.on('realtime_sync', handleRealtimeSync);
+    socket.on('item_uploaded', handleRealtimeSync);
+    socket.on('item_deleted', handleRealtimeSync);
+
+    return () => {
+      socket.off('realtime_sync', handleRealtimeSync);
+      socket.off('item_uploaded', handleRealtimeSync);
+      socket.off('item_deleted', handleRealtimeSync);
+    };
   }, []);
 
   // Background Lock Screen Notification listener for new alerts via Firestore

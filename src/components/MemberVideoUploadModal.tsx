@@ -84,19 +84,20 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
       // Automatic Thumbnail calculation & Video Type Correction
       let calculatedThumbnail = '';
       const ytId = extractYouTubeId(urlInput.trim());
-      const isPastedStream = urlInput.trim().includes('.m3u8') || urlInput.trim().includes('cloudflare') || urlInput.trim().includes('bunny');
-      const correctedVideoType = isPastedStream ? 'stream' : 'youtube';
+      const lowerUrl = urlInput.trim().toLowerCase();
+      const isPastedStream = lowerUrl.includes('m3u8') || lowerUrl.includes('cloudflare') || lowerUrl.includes('bunny') || lowerUrl.includes('hls') || lowerUrl.includes('/stream');
+      const correctedVideoType = isPastedStream ? 'stream' : (ytId ? 'youtube' : 'local');
 
       if (ytId) {
         calculatedThumbnail = `https://img.youtube.com/vi/${ytId}/hqdefault.jpg`;
       } else if (isPastedStream) {
-        calculatedThumbnail = 'https://framerusercontent.com/images/yHxdiWReVZDcqvytpuT8C65KlaU.jpg?width=1314&height=666';
+        calculatedThumbnail = 'https://img.youtube.com/vi/_65N3D5zTYg/hqdefault.jpg';
       } else if (urlInput.trim().includes('facebook.com') || urlInput.trim().includes('fb.watch')) {
         calculatedThumbnail = 'https://images.unsplash.com/photo-1504196606672-aef5c9cefc92?w=800&q=80';
       } else if (urlInput.trim().includes('instagram.com')) {
         calculatedThumbnail = 'https://images.unsplash.com/photo-1611162617213-7d7a39e9b1d7?w=800&q=80';
       } else {
-        calculatedThumbnail = 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=800&q=80';
+        calculatedThumbnail = 'https://img.youtube.com/vi/_65N3D5zTYg/hqdefault.jpg';
       }
       
       const newVideo: MemberVideoItem = {
@@ -149,7 +150,7 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
         }
 
         const videoId = `member-video-stream-${Date.now()}`;
-        const calculatedThumbnail = 'https://framerusercontent.com/images/yHxdiWReVZDcqvytpuT8C65KlaU.jpg?width=1314&height=666';
+        const calculatedThumbnail = 'https://img.youtube.com/vi/_65N3D5zTYg/hqdefault.jpg';
         
         const newVideo: MemberVideoItem = {
           id: videoId,
@@ -158,7 +159,7 @@ export const MemberVideoUploadModal: React.FC<MemberVideoUploadModalProps> = ({
           authorName: authorName.trim(),
           authorRole: authorRole.trim() || 'ক্লাব সদস্য',
           youtubeId: 'stream-member-video',
-          youtubeUrl: '',
+          youtubeUrl: streamUrl.trim(),
           videoType: 'stream',
           videoFileUrl: streamUrl.trim(),
           thumbnailUrl: calculatedThumbnail,

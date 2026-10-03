@@ -8,23 +8,29 @@ declare global {
 
 export const createPool = () => {
   if (!global._postgresPool) {
+    const isSqlConfigured = Boolean(process.env.SQL_HOST || process.env.DATABASE_URL);
+
     global._postgresPool = new Pool({
       host: process.env.SQL_HOST || '127.0.0.1',
       user: process.env.SQL_USER || 'postgres',
       password: process.env.SQL_PASSWORD || 'postgres',
       database: process.env.SQL_DB_NAME || 'postgres',
       max: 10,
-      connectionTimeoutMillis: 10000,
+      connectionTimeoutMillis: 3000,
     });
 
     global._postgresPool.on('error', (err) => {
-      console.error('Unexpected error on idle SQL pool client:', err);
+      console.warn('[PostgreSQL Pool Notice]:', err?.message || err);
     });
 
-    // Auto-create essential tables if they do not exist in Cloud SQL
-    initializeTables(global._postgresPool).catch((err) => {
-      console.warn('[PostgreSQL Init] Table auto-creation notice:', err?.message || err);
-    });
+    // Auto-create essential tables if PostgreSQL is configured
+    if (isSqlConfigured) {
+      initializeTables(global._postgresPool).catch((err) => {
+        console.warn('[PostgreSQL Init Notice]:', err?.message || err);
+      });
+    } else {
+      console.log('[PostgreSQL] Using Firebase Firestore as primary real-time database.');
+    }
   }
   return global._postgresPool;
 };
@@ -107,9 +113,13 @@ async function initializeTables(pool: Pool) {
   for (const table of tables) {
     try {
       await pool.query(table.query);
-      console.log(`[PostgreSQL Init] Table '${table.name}' checked/created successfully.`);
-    } catch (err) {
-      console.warn(`[PostgreSQL Init] Could not ensure table '${table.name}':`, err);
+      console.log(`[PostgreSQL Init] Table '${table.name}' checked successfully.`);
+    } catch (err: any) {
+      if (err?.code === '42501' || err?.message?.includes('permission denied')) {
+        console.log(`[PostgreSQL Init] Schema permission restricted; defaulting to Firebase Firestore.`);
+        break; // Stop loop cleanly
+      }
+      console.warn(`[PostgreSQL Init] Table notice ('${table.name}'):`, err?.message || err);
     }
   }
 }

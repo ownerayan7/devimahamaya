@@ -20,7 +20,7 @@ import { AddPhotoModal } from '../components/AddPhotoModal';
 import { AdminPhotoAuthModal } from '../components/AdminPhotoAuthModal';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer, addDeletedId } from '../utils/persistentStorage';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 import { socket } from '../lib/socket';
 import { sendAppNotification } from '../utils/notificationHelper';
@@ -227,6 +227,7 @@ export const TreePlantationPage: React.FC = () => {
 
   const executeDeleteTreePhoto = async (id: string) => {
     const idStr = String(id);
+    addDeletedId(idStr);
     const updated = customPhotos.filter((p) => p.id !== id);
     await saveCustomPhotos(updated);
 

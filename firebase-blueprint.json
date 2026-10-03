@@ -55,9 +55,29 @@
         "isCustom": { "type": "boolean" }
       },
       "required": ["id", "title"]
+    },
+    "PorboLink": {
+      "title": "Porbo Link",
+      "description": "Direct live links and social media links for Durga Pujo 2026 Porbo phases",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "porboIndex": { "type": "number" },
+        "porboTitle": { "type": "string" },
+        "category": { "type": "string" },
+        "title": { "type": "string" },
+        "url": { "type": "string" },
+        "isLiveActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["porboIndex", "category", "url"]
     }
   },
   "firestore": {
+    "/durgapujo_porbo_links/{linkId}": {
+      "schema": { "$ref": "PorboLink" },
+      "description": "Collection of Durga Pujo 2026 Porbo direct live and platform links"
+    },
     "/memberPhotos/{photoId}": {
       "schema": { "$ref": "MemberPhotoItem" },
       "description": "Collection of photos uploaded by members"
