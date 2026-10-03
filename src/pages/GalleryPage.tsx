@@ -21,7 +21,7 @@ import { AdminStorageAccessCard } from '../components/AdminStorageAccessCard';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, deleteDoc, doc } from 'firebase/firestore';
 import { sendAppNotification } from '../utils/notificationHelper';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer, addDeletedId } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer, addDeletedId, markItemGloballyDeleted, isDeleted } from '../utils/persistentStorage';
 import { socket } from '../lib/socket';
 
 const LOCAL_STORAGE_KEY = '11star_gallery_custom_photos';
@@ -87,13 +87,14 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ onOpenAdminStorage }) 
         savePersistentItems(LOCAL_STORAGE_KEY, finalLocalWithSyncFlags);
 
         // --- SMART AUTO BACKGROUND RE-SYNC ---
-        // Only upload items that have never been synced (synced is false or undefined)
-        const localOnlyToUpload = finalLocalWithSyncFlags.filter(p => p.isCustom && !(p as any).synced);
+        // Only upload items that have never been synced AND are not globally deleted
+        const localOnlyToUpload = finalLocalWithSyncFlags.filter(p => p.isCustom && !(p as any).synced && !isDeleted(p.id));
         
         if (localOnlyToUpload.length > 0) {
           console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced photos. Restoring...`);
           localOnlyToUpload.forEach(async (item) => {
             try {
+              if (isDeleted(item.id)) return;
               const updatedItem = { ...item, synced: true };
               await setDoc(doc(db, 'clubPhotos', String(item.id)), updatedItem);
               await uploadToFallbackServer('gallery_photo', item.title, item.subtitle || '', updatedItem);
@@ -212,21 +213,16 @@ export const GalleryPage: React.FC<GalleryPageProps> = ({ onOpenAdminStorage }) 
   const handleConfirmDeleteCustomPhoto = async () => {
     if (photoToDeleteId === null) return;
     const idStr = String(photoToDeleteId);
-    addDeletedId(idStr);
+    await markItemGloballyDeleted(idStr, 'clubPhotos');
     const updated = customPhotos.filter((p) => String(p.id) !== idStr);
     setCustomPhotos(updated);
     await savePersistentItems(LOCAL_STORAGE_KEY, updated);
-    try {
-      await deleteDoc(doc(db, 'clubPhotos', idStr));
-    } catch (err) {
-      console.warn('Failed to delete club photo from Firestore:', err);
-    }
     setPhotoToDeleteId(null);
     setIsDeleteAuthOpen(false);
   };
 
-  // Combine custom photos (at the beginning) + default photos
-  const allPhotos: GalleryPhotoItem[] = [...customPhotos, ...GALLERY_PHOTOS];
+  // Combine custom photos (at the beginning) + default photos, excluding deleted photos
+  const allPhotos: GalleryPhotoItem[] = [...customPhotos, ...GALLERY_PHOTOS].filter(p => !isDeleted(p.id));
 
   const filteredItems = activeCategory === 'all'
     ? allPhotos

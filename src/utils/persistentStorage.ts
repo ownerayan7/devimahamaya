@@ -1,3 +1,7 @@
+import { db } from '../lib/firebase';
+import { collection, doc, setDoc, deleteDoc, onSnapshot } from 'firebase/firestore';
+import { emitSocketDelete } from './socketClient';
+
 /**
  * Persistent Storage Engine using IndexedDB & LocalStorage Fallback.
  * Solves LocalStorage 5MB QuotaExceededError and Firestore latency issue
@@ -70,10 +74,12 @@ export function getDeletedIds(): string[] {
 export function addDeletedId(id: string | number): void {
   try {
     const strId = String(id);
+    if (!strId) return;
     const existing = getDeletedIds();
     if (!existing.includes(strId)) {
       const updated = [...existing, strId];
       localStorage.setItem(GLOBAL_DELETED_IDS_KEY, JSON.stringify(updated));
+      window.dispatchEvent(new Event('global_item_deleted'));
     }
   } catch (e) {
     console.warn('Error saving deleted ID:', e);
@@ -81,9 +87,72 @@ export function addDeletedId(id: string | number): void {
 }
 
 export function isDeleted(id: string | number): boolean {
-  if (!id) return false;
+  if (id === undefined || id === null) return false;
+  const strId = String(id);
   const deletedList = getDeletedIds();
-  return deletedList.includes(String(id));
+  return deletedList.includes(strId);
+}
+
+/**
+ * Permanently marks an item as globally deleted across all devices,
+ * syncing via Firestore globalDeletedIds collection and Socket.IO.
+ */
+export async function markItemGloballyDeleted(id: string | number, collectionName?: string): Promise<void> {
+  const strId = String(id);
+  if (!strId) return;
+
+  console.log(`[Global Delete] Permanently purging item ID: ${strId} (Collection: ${collectionName || 'any'})`);
+
+  // 1. Mark in local memory & localStorage
+  addDeletedId(strId);
+
+  // 2. Broadcast via Socket.IO
+  emitSocketDelete({ id: strId, collection: collectionName });
+
+  // 3. Delete from target Firestore collection if provided
+  try {
+    if (db && collectionName) {
+      await deleteDoc(doc(db, collectionName, strId));
+    }
+  } catch (err) {
+    console.warn(`Firestore collection delete warning (${collectionName}):`, err);
+  }
+
+  // 4. Save to globalDeletedIds collection in Firestore for 100% cloud sync
+  try {
+    if (db) {
+      await setDoc(doc(db, 'globalDeletedIds', strId), {
+        id: strId,
+        deletedAt: Date.now(),
+        collection: collectionName || 'general',
+      });
+    }
+  } catch (err) {
+    console.warn('Firestore globalDeletedIds write warning:', err);
+  }
+
+  // 5. Dispatch local event for instant UI re-render
+  window.dispatchEvent(new Event('global_item_deleted'));
+}
+
+// Global Firestore Listener for deleted IDs across all devices worldwide
+if (typeof window !== 'undefined') {
+  try {
+    if (db) {
+      onSnapshot(collection(db, 'globalDeletedIds'), (snapshot) => {
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          if (data && data.id) {
+            addDeletedId(String(data.id));
+          }
+        });
+      }, (err) => {
+        console.warn('globalDeletedIds listener warning:', err);
+      });
+    }
+  } catch (e) {
+    console.warn('globalDeletedIds setup error:', e);
+  }
 }
 
 /**

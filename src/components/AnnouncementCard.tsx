@@ -22,7 +22,7 @@ import { AdminPhotoAuthModal } from './AdminPhotoAuthModal';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
 import { sendAppNotification } from '../utils/notificationHelper';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer, addDeletedId } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer, addDeletedId, markItemGloballyDeleted, isDeleted } from '../utils/persistentStorage';
 import { socket } from '../lib/socket';
 
 const LOCAL_STORAGE_NOTICES_KEY = '11star_custom_announcements_v2';
@@ -94,13 +94,14 @@ export const AnnouncementCard: React.FC = () => {
         savePersistentItems(LOCAL_STORAGE_NOTICES_KEY, finalLocalWithSyncFlags);
 
         // --- SMART AUTO BACKGROUND RE-SYNC ---
-        // Only upload items that have never been synced (synced is false or undefined)
-        const localOnlyToUpload = finalLocalWithSyncFlags.filter(n => n.isCustom && !(n as any).synced);
+        // Only upload items that have never been synced AND are not globally deleted
+        const localOnlyToUpload = finalLocalWithSyncFlags.filter(n => n.isCustom && !(n as any).synced && !isDeleted(n.id));
         
         if (localOnlyToUpload.length > 0) {
           console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced notices. Restoring...`);
           localOnlyToUpload.forEach(async (item) => {
             try {
+              if (isDeleted(item.id)) return;
               const updatedItem = { ...item, synced: true };
               await setDoc(doc(db, 'announcements', String(item.id)), updatedItem);
               await uploadToFallbackServer('announcement', item.title, item.content || '', updatedItem);
@@ -224,22 +225,17 @@ export const AnnouncementCard: React.FC = () => {
   const handleConfirmDeleteNotice = async () => {
     if (!noticeToDeleteId) return;
     const id = noticeToDeleteId;
-    addDeletedId(id);
+    await markItemGloballyDeleted(id, 'announcements');
     const updated = customNotices.filter((n) => n.id !== id);
     saveCustomNotices(updated);
     if (activeNoticeId === id) {
       setActiveNoticeId(updated[0]?.id || ANNOUNCEMENTS[0].id);
     }
-    try {
-      await deleteDoc(doc(db, 'announcements', id));
-    } catch (err) {
-      console.warn('Failed to delete announcement from Firestore:', err);
-    }
     setNoticeToDeleteId(null);
     setIsDeleteAuthOpen(false);
   };
 
-  const allNotices: Announcement[] = [...customNotices, ...ANNOUNCEMENTS];
+  const allNotices: Announcement[] = [...customNotices, ...ANNOUNCEMENTS].filter((n) => !isDeleted(n.id));
   const activeNotice = allNotices.find((n) => n.id === activeNoticeId) || allNotices[0];
 
   const handleOpenNoticeImage = (url: string, title: string, subtitle: string) => {

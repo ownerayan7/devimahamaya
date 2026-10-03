@@ -3,8 +3,7 @@ import { motion } from 'motion/react';
 import { X, Trash2, Lock, AlertCircle, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { PorboLinkItem } from '../types';
 import { emitSocketDelete, emitSocketPorboLink } from '../utils/socketClient';
-
-const ADMIN_PASSWORD = "Ayan@2024";
+import { verifyAdminPassword } from '../utils/adminPasswordHelper';
 
 interface DeletePorboLinkModalProps {
   isOpen: boolean;
@@ -37,8 +36,8 @@ export const DeletePorboLinkModal: React.FC<DeletePorboLinkModalProps> = ({
     e.preventDefault();
     setError('');
 
-    if (passwordInput.trim() !== ADMIN_PASSWORD) {
-      setError('ভুল অ্যাডমিন পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন।');
+    if (!verifyAdminPassword(passwordInput)) {
+      setError('ভুল অ্যাডমিন পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন (যেমন: Ayan@2024)।');
       return;
     }
 

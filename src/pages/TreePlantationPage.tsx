@@ -20,7 +20,7 @@ import { AddPhotoModal } from '../components/AddPhotoModal';
 import { AdminPhotoAuthModal } from '../components/AdminPhotoAuthModal';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
-import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer, addDeletedId } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, mergeItemsWithLocal, uploadToFallbackServer, fetchFromFallbackServer, addDeletedId, markItemGloballyDeleted, isDeleted } from '../utils/persistentStorage';
 import { saveClubStoredItem } from '../utils/clubStorageManager';
 import { socket } from '../lib/socket';
 import { sendAppNotification } from '../utils/notificationHelper';
@@ -85,13 +85,14 @@ export const TreePlantationPage: React.FC = () => {
             savePersistentItems(LOCAL_STORAGE_KEY, finalLocalWithSyncFlags);
 
             // --- SMART AUTO BACKGROUND RE-SYNC ---
-            // Only upload items that have never been synced (synced is false or undefined)
-            const localOnlyToUpload = finalLocalWithSyncFlags.filter(p => p.isCustom && !(p as any).synced);
+            // Only upload items that have never been synced AND are not globally deleted
+            const localOnlyToUpload = finalLocalWithSyncFlags.filter(p => p.isCustom && !(p as any).synced && !isDeleted(p.id));
             
             if (localOnlyToUpload.length > 0) {
               console.log(`[Auto-Sync] Found ${localOnlyToUpload.length} unsynced tree photos. Restoring...`);
               localOnlyToUpload.forEach(async (item) => {
                 try {
+                  if (isDeleted(item.id)) return;
                   const updatedItem = { ...item, synced: true };
                   await setDoc(doc(db, 'treePlantationPhotos', String(item.id)), updatedItem);
                   await uploadToFallbackServer('tree_plantation_photo', item.title, item.subtitle || '', updatedItem);
@@ -227,20 +228,14 @@ export const TreePlantationPage: React.FC = () => {
 
   const executeDeleteTreePhoto = async (id: string) => {
     const idStr = String(id);
-    addDeletedId(idStr);
+    await markItemGloballyDeleted(idStr, 'treePlantationPhotos');
     const updated = customPhotos.filter((p) => p.id !== id);
     await saveCustomPhotos(updated);
-
-    try {
-      await deleteDoc(doc(db, 'treePlantationPhotos', idStr));
-    } catch (err) {
-      console.warn('Failed to delete tree photo from Firestore:', err);
-    }
     setPhotoToDeleteId(null);
     setIsDeleteAuthOpen(false);
   };
 
-  const allPhotos: TreePlantationPhotoItem[] = [...customPhotos, ...TREE_PLANTATION_PHOTOS];
+  const allPhotos: TreePlantationPhotoItem[] = [...customPhotos, ...TREE_PLANTATION_PHOTOS].filter((p) => !isDeleted(p.id));
 
   const filteredPhotos = activeCategory === 'all'
     ? allPhotos

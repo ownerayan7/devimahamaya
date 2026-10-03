@@ -14,6 +14,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { useAdminAuth } from '../context/AdminAuthContext';
+import { verifyAdminPassword } from '../utils/adminPasswordHelper';
 
 export interface AdminPhotoAuthModalProps {
   isOpen: boolean;
@@ -63,7 +64,7 @@ export const AdminPhotoAuthModal: React.FC<AdminPhotoAuthModalProps> = ({
     setIsSubmitting(true);
 
     const trimmed = password.trim();
-    if (trimmed === ADMIN_PASSWORD) {
+    if (verifyAdminPassword(trimmed)) {
       loginAdmin(trimmed);
       setIsSubmitting(false);
       setPassword('');
@@ -71,7 +72,7 @@ export const AdminPhotoAuthModal: React.FC<AdminPhotoAuthModalProps> = ({
       onClose();
     } else {
       setIsSubmitting(false);
-      setError('ভুল পাসওয়ার্ড! ক্লাবের সঠিক অ্যাডমিন পাসওয়ার্ড দিন।');
+      setError('ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন (যেমন: Ayan@2024)।');
     }
   };
 

@@ -38,7 +38,7 @@ import { broadcastMediaPlaybackStarted, subscribeToMediaStop, registerHtmlMediaE
 import { getDeviceId, isDeviceUploader } from '../utils/deviceHelper';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, setDoc, doc, deleteDoc } from 'firebase/firestore';
-import { loadPersistentItems, savePersistentItems, addDeletedId, isDeleted, mergeItemsWithLocal } from '../utils/persistentStorage';
+import { loadPersistentItems, savePersistentItems, addDeletedId, isDeleted, mergeItemsWithLocal, markItemGloballyDeleted } from '../utils/persistentStorage';
 import { sendAppNotification } from '../utils/notificationHelper';
 
 const OFFICIAL_STORAGE_KEY = '11star_custom_official_videos_v5';
@@ -361,24 +361,29 @@ export const VideosPage: React.FC<VideosPageProps> = () => {
     setIsDeleteAuthOpen(true);
   };
 
+  // Global deletion event listener
+  useEffect(() => {
+    const handleGlobalDeleteEvent = () => {
+      setOfficialVideos((prev) => prev.filter((v) => !isDeleted(v.id)));
+      setMemberVideos((prev) => prev.filter((m) => !isDeleted(m.id)));
+    };
+    window.addEventListener('global_item_deleted', handleGlobalDeleteEvent);
+    return () => window.removeEventListener('global_item_deleted', handleGlobalDeleteEvent);
+  }, []);
+
   // Execute Deletion
   const executeDelete = async (item: UnifiedVideoCardItem) => {
-    addDeletedId(item.id);
+    const colName = item.sourceType === 'official' ? 'officialVideos' : 'memberVideos';
+    await markItemGloballyDeleted(item.id, colName);
 
     if (item.sourceType === 'official') {
       const updated = officialVideos.filter((v) => v.id !== item.id);
       setOfficialVideos(updated);
       savePersistentItems(OFFICIAL_STORAGE_KEY, updated);
-      try {
-        await deleteDoc(doc(db, 'officialVideos', item.id));
-      } catch (e) {}
     } else {
       const updated = memberVideos.filter((m) => m.id !== item.id);
       setMemberVideos(updated);
       savePersistentItems(MEMBER_STORAGE_KEY, updated);
-      try {
-        await deleteDoc(doc(db, 'memberVideos', item.id));
-      } catch (e) {}
     }
 
     try {

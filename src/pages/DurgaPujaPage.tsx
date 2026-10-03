@@ -28,6 +28,7 @@ import { DeletePorboLinkModal } from '../components/DeletePorboLinkModal';
 import { PorboLinkItem } from '../types';
 import { db } from '../lib/firebase';
 import { collection, onSnapshot, query, addDoc, deleteDoc, doc } from 'firebase/firestore';
+import { markItemGloballyDeleted, isDeleted } from '../utils/persistentStorage';
 
 interface DurgaPujaPageProps {
   onOpenAdminStorage?: () => void;
@@ -54,10 +55,13 @@ export const DurgaPujaPage: React.FC<DurgaPujaPageProps> = ({ onOpenAdminStorage
           const linksData: PorboLinkItem[] = [];
           snapshot.forEach((docSnapshot) => {
             const data = docSnapshot.data();
-            linksData.push({
-              ...data,
-              id: docSnapshot.id, // Explicitly enforce Firestore doc ID
-            } as PorboLinkItem);
+            const itemId = docSnapshot.id;
+            if (!isDeleted(itemId)) {
+              linksData.push({
+                ...data,
+                id: itemId,
+              } as PorboLinkItem);
+            }
           });
           setPorboLinks(linksData);
         },
@@ -69,7 +73,15 @@ export const DurgaPujaPage: React.FC<DurgaPujaPageProps> = ({ onOpenAdminStorage
       console.warn('Firestore fallback setup warning:', err);
     }
 
-    return () => unsubscribe();
+    const handleGlobalDeleteEvent = () => {
+      setPorboLinks((prev) => prev.filter((item) => !isDeleted(item.id)));
+    };
+    window.addEventListener('global_item_deleted', handleGlobalDeleteEvent);
+
+    return () => {
+      unsubscribe();
+      window.removeEventListener('global_item_deleted', handleGlobalDeleteEvent);
+    };
   }, []);
 
   const handleOpenAddLink = (porboIdx: number) => {
@@ -95,7 +107,7 @@ export const DurgaPujaPage: React.FC<DurgaPujaPageProps> = ({ onOpenAdminStorage
     try {
       // Optimistic instant UI update
       setPorboLinks((prev) => prev.filter((item) => item.id !== linkId));
-      await deleteDoc(doc(db, 'durgapujo_porbo_links', linkId));
+      await markItemGloballyDeleted(linkId, 'durgapujo_porbo_links');
     } catch (err: any) {
       console.error('Error deleting link from Firestore:', err);
       throw err;

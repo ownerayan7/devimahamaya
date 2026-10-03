@@ -1,6 +1,6 @@
 import { db } from '../lib/firebase';
 import { collection, getDocs, query, orderBy, setDoc, doc, deleteDoc, onSnapshot } from 'firebase/firestore';
-import { savePersistentItems, loadPersistentItems, mergeItemsWithLocal } from './persistentStorage';
+import { savePersistentItems, loadPersistentItems, mergeItemsWithLocal, markItemGloballyDeleted } from './persistentStorage';
 
 export interface ClubStoredItem {
   id: string;
@@ -159,10 +159,12 @@ export const subscribeCloudClubItems = (onItemsUpdated: (items: ClubStoredItem[]
 };
 
 export const deleteClubStoredItem = async (id: string): Promise<void> => {
-  // 1. Mark ID permanently as deleted so it can never be resurrected by sync
+  // 1. Mark ID permanently as deleted across all devices globally
+  await markItemGloballyDeleted(id, 'clubDataStorage');
   addDeletedStorageId(id);
   if (id === 'store-2') {
     addDeletedStorageId('মহালয়া বিশেষ চণ্ডীপাঠ ও গান');
+    await markItemGloballyDeleted('মহালয়া বিশেষ চণ্ডীপাঠ ও গান', 'clubDataStorage');
   }
 
   // 2. Remove from local persistent storage
@@ -170,13 +172,4 @@ export const deleteClubStoredItem = async (id: string): Promise<void> => {
   const updated = existing.filter(item => item.id !== id && (id !== 'store-2' || item.title !== 'মহালয়া বিশেষ চণ্ডীপাঠ ও গান'));
   await savePersistentItems(STORAGE_KEY, updated);
   window.dispatchEvent(new Event('club_storage_updated'));
-
-  // 3. Remove from Firestore
-  try {
-    if (db) {
-      await deleteDoc(doc(db, 'clubDataStorage', id));
-    }
-  } catch (e) {
-    console.warn('Firestore delete warning:', e);
-  }
 };
